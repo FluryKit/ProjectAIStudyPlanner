@@ -1,0 +1,2 @@
+# ProjectAIStudyPlanner
+Project UAS kuliah
