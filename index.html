@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudyBloom - AI Study Planner</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <header>
+        <div class="logo">✦ StudyBloom</div>
+
+        <nav>
+            <button class="nav-btn active" onclick="showPage('dashboard')">
+                Dashboard
+            </button>
+
+            <button class="nav-btn" onclick="showPage('subjects')">
+                Subjects
+            </button>
+
+            <button class="nav-btn" onclick="showPage('planner')">
+                AI Planner
+            </button>
+        </nav>
+    </header>
+
+
+    <main>
+
+        <!-- DASHBOARD -->
+        <section id="dashboard" class="page active-page">
+
+            <div class="welcome">
+                <p class="small-text">Good afternoon! ♡</p>
+                <h1>Ready to study?</h1>
+                <p>Here's what's waiting for you today.</p>
+            </div>
+
+
+            <div class="stats">
+
+                <div class="stat-card">
+                    <span>📚</span>
+                    <div>
+                        <h2 id="taskCount">0</h2>
+                        <p>Tasks Remaining</p>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <span>⏱</span>
+                    <div>
+                        <h2 id="studyTime">0h</h2>
+                        <p>Study Time</p>
+                    </div>
+                </div>
+
+            </div>
+
+
+            <div class="card">
+
+                <div class="section-title">
+                    <h2>Today's Tasks</h2>
+                    <button onclick="showPage('planner')" class="small-button">
+                        + Add
+                    </button>
+                </div>
+
+                <div id="taskList">
+                    <p class="empty">No tasks yet ♡</p>
+                </div>
+
+            </div>
+
+
+            <button class="ai-button" onclick="showPage('planner')">
+                ✦ Create an AI Study Plan
+            </button>
+
+        </section>
+
+
+
+        <!-- SUBJECTS -->
+        <section id="subjects" class="page">
+
+            <div class="welcome">
+                <p class="small-text">Your learning space</p>
+                <h1>My Subjects</h1>
+                <p>Add the subjects you want to study.</p>
+            </div>
+
+
+            <div class="card">
+
+                <h2>Add Subject</h2>
+
+                <input
+                    type="text"
+                    id="subjectName"
+                    placeholder="e.g. Cryptography"
+                >
+
+                <select id="subjectDifficulty">
+                    <option value="Easy">Easy</option>
+                    <option value="Medium" selected>Medium</option>
+                    <option value="Hard">Hard</option>
+                </select>
+
+                <button class="primary-button" onclick="addSubject()">
+                    Add Subject
+                </button>
+
+            </div>
+
+
+            <div class="card">
+
+                <h2>Your Subjects</h2>
+
+                <div id="subjectList">
+                    <p class="empty">No subjects yet ♡</p>
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- AI PLANNER -->
+        <section id="planner" class="page">
+
+            <div class="welcome">
+                <p class="small-text">Let's plan your study time</p>
+                <h1>AI Study Planner ✦</h1>
+                <p>Tell us what you need to study.</p>
+            </div>
+
+
+            <div class="card">
+
+                <label>What do you need to study?</label>
+
+                <textarea
+                    id="studyTopic"
+                    placeholder="Example: I need to study Cryptography and prepare for my exam."
+                ></textarea>
+
+
+                <label>When is your deadline?</label>
+
+                <input type="date" id="deadline">
+
+
+                <label>How much time can you study each day?</label>
+
+                <select id="dailyHours">
+                    <option value="1">1 hour</option>
+                    <option value="2" selected>2 hours</option>
+                    <option value="3">3 hours</option>
+                    <option value="4">4 hours</option>
+                    <option value="5">5+ hours</option>
+                </select>
+
+
+                <label>Difficulty</label>
+
+                <select id="difficulty">
+                    <option value="Easy">Easy</option>
+                    <option value="Medium" selected>Medium</option>
+                    <option value="Hard">Hard</option>
+                </select>
+
+
+                <button class="ai-button" onclick="generatePlan()">
+                    ✦ Generate Study Plan
+                </button>
+
+            </div>
+
+
+            <div id="planResult" class="card hidden">
+
+                <h2>Your Study Plan ♡</h2>
+
+                <div id="generatedPlan"></div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <footer>
+        Made with ♡ for studying
+    </footer>
+
+
+    <script src="script.js"></script>
+
+</body>
+</html>
