@@ -1,0 +1,48 @@
+<section class="page-container">
+    <div class="welcome-header">
+        <p class="small-tag"><i class="fa-solid fa-robot"></i> Intelligent Scheduling</p>
+        <h1>AI Study Planner</h1>
+        <p>Describe your goal, and automatically build a structured daily study plan.</p>
+    </div>
+
+    <div class="card">
+        <div class="form-group">
+            <label for="studyTopic">What do you need to study?</label>
+            <textarea id="studyTopic" rows="3" placeholder="Example: Review RSA Algorithm and Database Normalization..."></textarea>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="deadline">Target Deadline</label>
+                <input type="date" id="deadline">
+            </div>
+            <div class="form-group">
+                <label for="dailyHours">Daily Study Time</label>
+                <select id="dailyHours">
+                    <option value="1">1 hour / day</option>
+                    <option value="2" selected>2 hours / day</option>
+                    <option value="3">3 hours / day</option>
+                    <option value="4">4 hours / day</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="difficulty">Subject Difficulty</label>
+            <select id="difficulty">
+                <option value="Easy">Easy</option>
+                <option value="Medium" selected>Medium</option>
+                <option value="Hard">Hard</option>
+            </select>
+        </div>
+
+        <button class="primary-button" onclick="generatePlan()">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Generate AI Study Plan
+        </button>
+    </div>
+
+    <div id="planResult" class="card hidden">
+        <h2><i class="fa-solid fa-calendar-check"></i> Generated Schedule</h2>
+        <div id="generatedPlan" class="generated-plan-container"></div>
+    </div>
+</section>

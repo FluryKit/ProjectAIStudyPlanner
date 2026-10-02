@@ -8,345 +8,39 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
 
-    <header>
-        <div class="logo" onclick="showPage('home')" style="cursor: pointer;">
+    <header class="app-header">
+        <div class="logo" onclick="navigateTo('home')">
             <i class="fa-solid fa-dove logo-icon"></i>
             <span>StudyNest</span>
         </div>
 
-        <nav>
-            <button class="nav-btn active" onclick="showPage('home')">
+        <nav class="app-nav">
+            <button class="nav-btn active" data-page="home" onclick="navigateTo('home')">
                 <i class="fa-solid fa-house"></i> Home
             </button>
-            <button class="nav-btn" onclick="showPage('dashboard')">
+            <button class="nav-btn" data-page="dashboard" onclick="navigateTo('dashboard')">
                 <i class="fa-solid fa-chart-pie"></i> Dashboard
             </button>
-            <button class="nav-btn" onclick="showPage('subjects')">
+            <button class="nav-btn" data-page="subjects" onclick="navigateTo('subjects')">
                 <i class="fa-solid fa-book-open"></i> Subjects
             </button>
-            <button class="nav-btn" onclick="showPage('planner')">
+            <button class="nav-btn" data-page="planner" onclick="navigateTo('planner')">
                 <i class="fa-solid fa-wand-magic-sparkles"></i> AI Planner
+            </button>
+            
+            <button id="themeToggle" class="theme-toggle-btn" onclick="toggleTheme()">
+                <i class="fa-solid fa-sun"></i> Light Mode
             </button>
         </nav>
     </header>
 
-    <main>
+    <!-- Dynamic content loaded here -->
+    <main id="app-container" class="main-content"></main>
 
-        <!-- HOME / LANDING SCREEN -->
-        <section id="home" class="page active-page">
-            
-            <div class="hero-card">
-                <div class="hero-content">
-                    <span class="badge"><i class="fa-solid fa-sparkles"></i> Intelligent Academic Assistant</span>
-                    <h1>Organize Your Studies with AI Precision</h1>
-                    <p>StudyNest automatically prioritizes your workload, tracks upcoming exam deadlines, and gives real-time schedule warning alerts to keep your learning stress-free.</p>
-                    <div class="hero-actions">
-                        <button class="ai-button hero-btn" onclick="showPage('dashboard')">
-                            <i class="fa-solid fa-gauge-high"></i> Go to Dashboard
-                        </button>
-                        <button class="secondary-button hero-btn" onclick="showPage('planner')">
-                            <i class="fa-solid fa-wand-magic-sparkles"></i> Create AI Plan
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="features-header">
-                <h2><i class="fa-solid fa-layer-group"></i> Smart Features Built For Success</h2>
-                <p>Designed for clean, structured, and deliberate learning.</p>
-            </div>
-
-            <div class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon red">
-                        <i class="fa-solid fa-fire"></i>
-                    </div>
-                    <h3>Smart Prioritization</h3>
-                    <p>Categorizes tasks automatically into Urgent, Important, or Can Wait based on your schedule.</p>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon orange">
-                        <i class="fa-solid fa-stopwatch"></i>
-                    </div>
-                    <h3>Deadline Tracker</h3>
-                    <p>Tracks target dates with days-left counters and alerts you if study time gets too tight.</p>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon green">
-                        <i class="fa-solid fa-chart-pie"></i>
-                    </div>
-                    <h3>Progress Dashboard</h3>
-                    <p>Monitors weekly study hours, completed task metrics, completion rates, and subject progress.</p>
-                </div>
-            </div>
-
-        </section>
-
-        <!-- DASHBOARD -->
-        <section id="dashboard" class="page">
-
-            <div class="welcome">
-                <p class="small-text"><i class="fa-regular fa-sun"></i> Good afternoon!</p>
-                <h1>Ready to study?</h1>
-                <p>Here is your current academic performance and plan for today.</p>
-            </div>
-
-            <!-- Schedule Warning Alert -->
-            <div class="alert-banner warning-alert">
-                <i class="fa-solid fa-triangle-exclamation alert-icon"></i>
-                <div class="alert-content">
-                    <strong>Schedule Warning:</strong> You have 2 deadlines within 3 days and limited study slots remaining.
-                </div>
-            </div>
-
-            <!-- PROGRESS DASHBOARD -->
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-icon-wrapper green">
-                        <i class="fa-solid fa-clock"></i>
-                    </div>
-                    <div class="stat-info">
-                        <h2 id="studyTime">14.5 hrs</h2>
-                        <p>Weekly Study Hours</p>
-                    </div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-icon-wrapper green">
-                        <i class="fa-solid fa-circle-check"></i>
-                    </div>
-                    <div class="stat-info">
-                        <h2 id="completedTasks">18 / 22</h2>
-                        <p>Completed Tasks</p>
-                    </div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-icon-wrapper sage">
-                        <i class="fa-solid fa-chart-line"></i>
-                    </div>
-                    <div class="stat-info">
-                        <h2 id="completionRate">81%</h2>
-                        <p>Completion Rate</p>
-                    </div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-icon-wrapper orange">
-                        <i class="fa-solid fa-calendar-day"></i>
-                    </div>
-                    <div class="stat-info">
-                        <h2 id="upcomingDeadlines">3</h2>
-                        <p>Upcoming Deadlines</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- DASHBOARD TWO-COLUMN LAYOUT -->
-            <div class="dashboard-columns">
-                
-                <!-- SMART TASK PRIORITIZATION SECTION -->
-                <div class="card column-main">
-                    <div class="section-title">
-                        <h2><i class="fa-solid fa-list-check"></i> Today's Tasks</h2>
-                        <button onclick="showPage('planner')" class="small-button">
-                            <i class="fa-solid fa-plus"></i> Add
-                        </button>
-                    </div>
-
-                    <div id="taskList" class="task-list">
-                        <!-- Example Urgent Task -->
-                        <div class="task-item">
-                            <input type="checkbox" id="task1">
-                            <label for="task1" class="task-details">
-                                <span class="task-title">Review Cryptography RSA Algorithm</span>
-                                <span class="task-meta"><i class="fa-regular fa-clock"></i> 2 hours study</span>
-                            </label>
-                            <span class="priority-badge priority-urgent">
-                                <i class="fa-solid fa-fire"></i> Urgent
-                            </span>
-                        </div>
-
-                        <!-- Example Important Task -->
-                        <div class="task-item">
-                            <input type="checkbox" id="task2">
-                            <label for="task2" class="task-details">
-                                <span class="task-title">Database Normalization Notes</span>
-                                <span class="task-meta"><i class="fa-regular fa-clock"></i> 1 hour study</span>
-                            </label>
-                            <span class="priority-badge priority-important">
-                                <i class="fa-solid fa-circle-exclamation"></i> Important
-                            </span>
-                        </div>
-
-                        <!-- Example Can Wait Task -->
-                        <div class="task-item">
-                            <input type="checkbox" id="task3">
-                            <label for="task3" class="task-details">
-                                <span class="task-title">Read Linear Algebra Chapter 4</span>
-                                <span class="task-meta"><i class="fa-regular fa-clock"></i> 45 mins</span>
-                            </label>
-                            <span class="priority-badge priority-low">
-                                <i class="fa-solid fa-hourglass-half"></i> Can Wait
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- DEADLINE TRACKER & SUBJECT PROGRESS SIDEBAR -->
-                <div class="column-sidebar">
-                    
-                    <!-- DEADLINE TRACKER -->
-                    <div class="card">
-                        <div class="section-title">
-                            <h2><i class="fa-solid fa-calendar-days"></i> Deadline Tracker</h2>
-                        </div>
-                        <div class="deadline-list">
-                            <div class="deadline-item urgent-border">
-                                <div class="deadline-info">
-                                    <strong>Cryptography Exam</strong>
-                                    <span>Oct 02, 2026</span>
-                                </div>
-                                <span class="days-tag danger"><i class="fa-solid fa-stopwatch"></i> 3 days left</span>
-                            </div>
-
-                            <div class="deadline-item">
-                                <div class="deadline-info">
-                                    <strong>Database Design Submission</strong>
-                                    <span>Oct 08, 2026</span>
-                                </div>
-                                <span class="days-tag warning"><i class="fa-regular fa-calendar"></i> 9 days left</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- SUBJECT PROGRESS -->
-                    <div class="card">
-                        <div class="section-title">
-                            <h2><i class="fa-solid fa-graduation-cap"></i> Subject Progress</h2>
-                        </div>
-                        <div class="subject-progress-list">
-                            <div class="progress-item">
-                                <div class="progress-labels">
-                                    <span>Cryptography</span>
-                                    <span>75%</span>
-                                </div>
-                                <div class="progress-bar-bg">
-                                    <div class="progress-bar-fill" style="width: 75%;"></div>
-                                </div>
-                            </div>
-
-                            <div class="progress-item">
-                                <div class="progress-labels">
-                                    <span>Database Systems</span>
-                                    <span>40%</span>
-                                </div>
-                                <div class="progress-bar-bg">
-                                    <div class="progress-bar-fill" style="width: 40%;"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                </div>
-            </div>
-
-            <button class="ai-button" onclick="showPage('planner')">
-                <i class="fa-solid fa-wand-magic-sparkles"></i> Create an AI Study Plan
-            </button>
-
-        </section>
-
-        <!-- SUBJECTS -->
-        <section id="subjects" class="page">
-            <div class="welcome">
-                <p class="small-text"><i class="fa-solid fa-folder-open"></i> Your learning space</p>
-                <h1>My Subjects</h1>
-                <p>Manage the subjects you are preparing for.</p>
-            </div>
-
-            <div class="card">
-                <h2><i class="fa-solid fa-folder-plus"></i> Add Subject</h2>
-                
-                <label for="subjectName">Subject Name</label>
-                <input type="text" id="subjectName" placeholder="e.g. Cryptography">
-
-                <label for="subjectDifficulty">Difficulty Level</label>
-                <select id="subjectDifficulty">
-                    <option value="Easy">Easy</option>
-                    <option value="Medium" selected>Medium</option>
-                    <option value="Hard">Hard</option>
-                </select>
-
-                <button class="primary-button" onclick="addSubject()">
-                    <i class="fa-solid fa-plus"></i> Add Subject
-                </button>
-            </div>
-
-            <div class="card">
-                <h2><i class="fa-solid fa-layer-group"></i> Your Subjects</h2>
-                <div id="subjectList">
-                    <p class="empty"><i class="fa-solid fa-inbox"></i> No subjects added yet.</p>
-                </div>
-            </div>
-        </section>
-
-        <!-- AI PLANNER -->
-        <section id="planner" class="page">
-            <div class="welcome">
-                <p class="small-text"><i class="fa-solid fa-robot"></i> Intelligent Scheduling</p>
-                <h1>AI Study Planner</h1>
-                <p>Describe your goal, and let AI prioritize your tasks and schedule.</p>
-            </div>
-
-            <div class="card">
-                <label for="studyTopic">What do you need to study?</label>
-                <textarea id="studyTopic" placeholder="Example: I need to prepare for my Cryptography midterm covering RSA, AES, and hashing algorithms."></textarea>
-
-                <div class="form-row">
-                    <div>
-                        <label for="deadline">Target Deadline</label>
-                        <input type="date" id="deadline">
-                    </div>
-                    <div>
-                        <label for="dailyHours">Daily Study Time</label>
-                        <select id="dailyHours">
-                            <option value="1">1 hour / day</option>
-                            <option value="2" selected>2 hours / day</option>
-                            <option value="3">3 hours / day</option>
-                            <option value="4">4 hours / day</option>
-                            <option value="5">5+ hours / day</option>
-                        </select>
-                    </div>
-                </div>
-
-                <label for="difficulty">Subject Difficulty</label>
-                <select id="difficulty">
-                    <option value="Easy">Easy</option>
-                    <option value="Medium" selected>Medium</option>
-                    <option value="Hard">Hard</option>
-                </select>
-
-                <button class="ai-button" onclick="generatePlan()">
-                    <i class="fa-solid fa-wand-magic-sparkles"></i> Generate AI Study Plan
-                </button>
-            </div>
-
-            <div id="planResult" class="card hidden">
-                <h2><i class="fa-solid fa-calendar-check"></i> Your Generated Study Plan</h2>
-                <div id="generatedPlan"></div>
-            </div>
-        </section>
-
-    </main>
-
-    <footer>
-        <p><i class="fa-solid fa-graduation-cap"></i> StudyNest AI - Empowering Smart Learning</p>
+    <footer class="app-footer">
+        <p><i class="fa-solid fa-graduation-cap"></i> StudyNest AI &mdash; Empowering Smart Learning</p>
     </footer>
 
     <script src="script.js"></script>
