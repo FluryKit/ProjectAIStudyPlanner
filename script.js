@@ -1,8 +1,57 @@
-// State Management
-let subjects = JSON.parse(localStorage.getItem("subjects")) || [];
-let tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+// Google Apps Script API Web App Endpoint
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyZOYGD0SNQae5PUukr_lR20e3M_PLL7GLnx27dIc8A3vesaFMa5F-qEFtv1QnefESL5A/exec";
 
-// Active View Router
+let subjects = [];
+let tasks = [];
+
+// --- DATA FETCHING & SYNC WITH GOOGLE SHEETS ---
+async function loadDataFromSheet() {
+    if (!APPS_SCRIPT_URL) return;
+
+    try {
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=getData`);
+        if (!response.ok) throw new Error("Failed to fetch data from Google Sheets.");
+        
+        const data = await response.json();
+        tasks = data.tasks || [];
+        subjects = data.subjects || [];
+    } catch (err) {
+        console.error("Error connecting to Google Sheets Backend:", err);
+    }
+}
+
+async function syncTaskToSheet(task) {
+    if (!APPS_SCRIPT_URL) return;
+
+    try {
+        await fetch(APPS_SCRIPT_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "saveTask", ...task })
+        });
+    } catch (err) {
+        console.error("Error saving task to Google Sheets:", err);
+    }
+}
+
+async function syncSubjectToSheet(subject) {
+    if (!APPS_SCRIPT_URL) return;
+
+    try {
+        await fetch(APPS_SCRIPT_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "saveSubject", ...subject })
+        });
+    } catch (err) {
+        console.error("Error saving subject to Google Sheets:", err);
+    }
+}
+
+// --- NAVIGATION & ROUTER ---
+
 async function navigateTo(pageName) {
     const container = document.getElementById("app-container");
     
@@ -12,31 +61,256 @@ async function navigateTo(pageName) {
         const html = await response.text();
         container.innerHTML = html;
 
-        // Update Nav UI
+        // Update Navigation Active State
         document.querySelectorAll(".nav-btn").forEach(btn => {
             btn.classList.toggle("active", btn.dataset.page === pageName);
         });
 
-        // Initialize page-specific view models
-        if (pageName === "dashboard") renderTasks();
+        // Initialize view logic
+        if (pageName === "home") checkScheduleWarnings(tasks);
+        if (pageName === "priority") renderPriorityMatrix();
+        if (pageName === "calendar") renderCalendarView();
+        if (pageName === "progress") renderProgressDashboard();
         if (pageName === "subjects") renderSubjects();
 
         window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
-        container.innerHTML = `<div class="card"><p>Error loading page view.</p></div>`;
+        container.innerHTML = `<div class="card"><p>Error loading view: ${pageName}</p></div>`;
     }
 }
 
-// Subject Management
-function addSubject() {
+// --- HEURISTIC ALGORITHMS ---
+
+function daysUntil(dateStr) {
+    if (!dateStr) return 99;
+    const diff = new Date(dateStr) - new Date();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
+function calculateTaskPriority(dueDateStr, importanceLevel) {
+    const daysLeft = daysUntil(dueDateStr);
+    
+    let urgencyScore = 0;
+    if (daysLeft <= 1) urgencyScore = 50;
+    else if (daysLeft <= 3) urgencyScore = 35;
+    else if (daysLeft <= 7) urgencyScore = 20;
+    else urgencyScore = 5;
+
+    const importanceScore = Number(importanceLevel) * 10;
+    const totalScore = urgencyScore + importanceScore;
+
+    if (urgencyScore >= 35 && importanceScore >= 30) return { quadrant: "quad-do-first", label: "Urgent & Important", score: totalScore };
+    if (urgencyScore < 35 && importanceScore >= 30) return { quadrant: "quad-schedule", label: "Important, Schedule", score: totalScore };
+    if (urgencyScore >= 35 && importanceScore < 30) return { quadrant: "quad-quick", label: "Quick Finish", score: totalScore };
+    return { quadrant: "quad-wait", label: "Can Wait", score: totalScore };
+}
+
+// --- PRIORITY MATRIX VIEW ---
+
+function populateSubjectSelect() {
+    const select = document.getElementById("taskSubject");
+    if (!select) return;
+
+    if (subjects.length === 0) {
+        select.innerHTML = `<option value="General">General</option>`;
+        return;
+    }
+
+    select.innerHTML = subjects.map(s => `<option value="${s.name}">${s.name}</option>`).join("");
+}
+
+async function addAndPrioritizeTask() {
+    const title = document.getElementById("taskTitle").value.trim();
+    const subject = document.getElementById("taskSubject").value;
+    const dueDate = document.getElementById("taskDueDate").value;
+    const importance = document.getElementById("taskImportance").value;
+
+    if (!title || !dueDate) return alert("Please fill in task title and due date.");
+
+    const newTask = {
+        id: Date.now(),
+        name: title,
+        subject: subject,
+        due_date: dueDate,
+        importance: Number(importance),
+        duration: 60,
+        completed: false
+    };
+
+    tasks.push(newTask);
+    await syncTaskToSheet(newTask);
+    
+    document.getElementById("taskTitle").value = "";
+    document.getElementById("taskDueDate").value = "";
+    
+    renderPriorityMatrix();
+}
+
+function renderPriorityMatrix() {
+    populateSubjectSelect();
+
+    const quads = {
+        "quad-do-first": document.getElementById("quad-do-first"),
+        "quad-schedule": document.getElementById("quad-schedule"),
+        "quad-quick": document.getElementById("quad-quick"),
+        "quad-wait": document.getElementById("quad-wait")
+    };
+
+    if (!quads["quad-do-first"]) return;
+
+    Object.values(quads).forEach(q => q.innerHTML = "");
+
+    const activeTasks = tasks.filter(t => !t.completed);
+
+    if (activeTasks.length === 0) {
+        Object.values(quads).forEach(q => {
+            q.innerHTML = `<p class="empty-text"><i class="fa-solid fa-circle-check"></i> No active tasks!</p>`;
+        });
+        return;
+    }
+
+    const taskCounts = { "quad-do-first": 0, "quad-schedule": 0, "quad-quick": 0, "quad-wait": 0 };
+
+    activeTasks.forEach(task => {
+        const prio = calculateTaskPriority(task.due_date, task.importance || 3);
+        const container = quads[prio.quadrant];
+        taskCounts[prio.quadrant]++;
+
+        if (container) {
+            const item = document.createElement("div");
+            item.className = "task-item";
+            item.innerHTML = `
+                <input type="checkbox" id="prio-${task.id}" onchange="toggleTask(${task.id}, 'priority')">
+                <label for="prio-${task.id}" class="task-details">
+                    <span class="task-title">${task.name}</span>
+                    <span class="task-meta"><i class="fa-regular fa-calendar"></i> ${task.due_date || 'No Date'} | ${task.subject || 'General'}</span>
+                </label>
+            `;
+            container.appendChild(item);
+        }
+    });
+
+    Object.keys(quads).forEach(key => {
+        if (taskCounts[key] === 0) {
+            quads[key].innerHTML = `<p class="empty-text"><i class="fa-solid fa-inbox"></i> No tasks in this quadrant.</p>`;
+        }
+    });
+}
+
+// --- CALENDAR VIEW ---
+
+function renderCalendarView() {
+    const list = document.getElementById("calendarList");
+    const badge = document.getElementById("countdownBadge");
+    if (!list) return;
+
+    checkScheduleWarnings(tasks);
+
+    const sorted = [...tasks].sort((a, b) => new Date(a.due_date || "2099-01-01") - new Date(b.due_date || "2099-01-01"));
+    const pending = sorted.filter(t => !t.completed);
+
+    if (pending.length > 0 && badge) {
+        const closestDays = daysUntil(pending[0].due_date);
+        badge.textContent = closestDays === 0 ? "Next deadline TODAY!" : `Next deadline in ${closestDays} day(s)`;
+    } else if (badge) {
+        badge.textContent = "All caught up!";
+    }
+
+    if (sorted.length === 0) {
+        list.innerHTML = `<p class="empty-text"><i class="fa-solid fa-calendar-xmark"></i> No upcoming deadlines added.</p>`;
+        return;
+    }
+
+    list.innerHTML = sorted.map(t => {
+        const days = daysUntil(t.due_date);
+        let dueClass = days <= 1 ? "color: #e74c3c; font-weight: bold;" : "";
+        return `
+            <div class="task-item ${t.completed ? 'completed' : ''}">
+                <input type="checkbox" id="cal-${t.id}" ${t.completed ? 'checked' : ''} onchange="toggleTask(${t.id}, 'calendar')">
+                <label for="cal-${t.id}" class="task-details" style="width: 100%;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span class="task-title">${t.name}</span>
+                        <span class="task-meta" style="${dueClass}">${days <= 0 ? 'Due Today' : days + ' days left'}</span>
+                    </div>
+                    <span class="task-meta"><i class="fa-regular fa-clock"></i> ${t.due_date || 'N/A'} &bull; ${t.subject || 'General'}</span>
+                </label>
+            </div>
+        `;
+    }).join("");
+}
+
+function checkScheduleWarnings(taskList) {
+    const alertBanner = document.getElementById("workloadAlert");
+    if (!alertBanner) return;
+
+    const upcoming = taskList.filter(t => !t.completed && daysUntil(t.due_date) <= 3 && daysUntil(t.due_date) >= 0);
+    const totalHoursNeeded = upcoming.length * 2.5; 
+
+    if (totalHoursNeeded > 6) {
+        alertBanner.classList.remove("hidden");
+        document.getElementById("alertMessage").textContent = 
+            `Tight schedule! You have ${upcoming.length} upcoming deadlines requiring ~${totalHoursNeeded} hours within 3 days.`;
+    } else {
+        alertBanner.classList.add("hidden");
+    }
+}
+
+// --- PROGRESS DASHBOARD VIEW ---
+
+function renderProgressDashboard() {
+    const total = tasks.length;
+    const completed = tasks.filter(t => t.completed).length;
+    const upcoming = tasks.filter(t => !t.completed && daysUntil(t.due_date) <= 7).length;
+    const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    const completedVal = document.getElementById("completedTasksVal");
+    const rateVal = document.getElementById("completionRateVal");
+    const upcomingVal = document.getElementById("upcomingCountVal");
+
+    if (completedVal) completedVal.textContent = `${completed} / ${total}`;
+    if (rateVal) rateVal.textContent = `${rate}%`;
+    if (upcomingVal) upcomingVal.textContent = upcoming;
+
+    const subContainer = document.getElementById("subjectProgressContainer");
+    if (!subContainer) return;
+
+    if (subjects.length === 0) {
+        subContainer.innerHTML = `<p class="empty-text">No subjects added yet.</p>`;
+        return;
+    }
+
+    subContainer.innerHTML = subjects.map(s => {
+        const subTasks = tasks.filter(t => t.subject === s.name);
+        const subDone = subTasks.filter(t => t.completed).length;
+        const subRate = subTasks.length > 0 ? Math.round((subDone / subTasks.length) * 100) : 0;
+
+        return `
+            <div>
+                <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 600; margin-bottom: 6px;">
+                    <span>${s.name}</span>
+                    <span>${subRate}% (${subDone}/${subTasks.length})</span>
+                </div>
+                <div style="background: var(--bg-subcard); height: 10px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border-color);">
+                    <div style="background: var(--accent-sage); width: ${subRate}%; height: 100%; transition: width 0.3s ease;"></div>
+                </div>
+            </div>
+        `;
+    }).join("");
+}
+
+// --- SUBJECT MANAGEMENT ---
+
+async function addSubject() {
     const nameInput = document.getElementById("subjectName");
     const diffInput = document.getElementById("subjectDifficulty");
     const name = nameInput.value.trim();
 
     if (!name) return alert("Please enter a subject name.");
 
-    subjects.push({ id: Date.now(), name, difficulty: diffInput.value });
-    saveData();
+    const newSubject = { id: Date.now(), name, difficulty: diffInput.value };
+    subjects.push(newSubject);
+    await syncSubjectToSheet(newSubject);
+
     nameInput.value = "";
     renderSubjects();
 }
@@ -54,7 +328,7 @@ function renderSubjects() {
         <div class="subject-item">
             <div>
                 <strong>${sub.name}</strong>
-                <span class="sub-badge">${sub.difficulty}</span>
+                <span class="sub-badge" style="margin-left: 8px;">${sub.difficulty}</span>
             </div>
             <button class="delete-btn" onclick="deleteSubject(${sub.id})">
                 <i class="fa-solid fa-trash"></i>
@@ -65,128 +339,33 @@ function renderSubjects() {
 
 function deleteSubject(id) {
     subjects = subjects.filter(s => s.id !== id);
-    saveData();
     renderSubjects();
 }
 
-// Task Management
-function toggleTask(id) {
+// --- TOGGLES & THEME ---
+
+async function toggleTask(id, currentView) {
     const task = tasks.find(t => t.id === id);
     if (task) {
         task.completed = !task.completed;
-        saveData();
-        renderTasks();
+        await syncTaskToSheet(task);
+        if (currentView === 'priority') renderPriorityMatrix();
+        if (currentView === 'calendar') renderCalendarView();
+        if (currentView === 'progress') renderProgressDashboard();
     }
-}
-
-function renderTasks() {
-    const container = document.getElementById("taskList");
-    if (!container) return;
-
-    if (tasks.length === 0) {
-        container.innerHTML = `<p class="empty-text"><i class="fa-solid fa-inbox"></i> No tasks found. Create one with AI Planner!</p>`;
-        updateStats();
-        return;
-    }
-
-    container.innerHTML = tasks.map(task => `
-        <div class="task-item ${task.completed ? 'completed' : ''}">
-            <input type="checkbox" id="task-${task.id}" ${task.completed ? 'checked' : ''} onchange="toggleTask(${task.id})">
-            <label for="task-${task.id}" class="task-details">
-                <span class="task-title">${task.name}</span>
-                <span class="task-meta"><i class="fa-regular fa-clock"></i> ${task.duration} mins</span>
-            </label>
-        </div>
-    `).join("");
-
-    updateStats();
-}
-
-function updateStats() {
-    const remaining = tasks.filter(t => !t.completed);
-    const completedCount = tasks.length - remaining.length;
-    
-    const studyTimeElem = document.getElementById("studyTime");
-    const completedStatElem = document.getElementById("completedStat");
-    const completionRateElem = document.getElementById("completionRate");
-    const subjectCountElem = document.getElementById("subjectCount");
-
-    if (completedStatElem) completedStatElem.textContent = `${completedCount} / ${tasks.length}`;
-    if (subjectCountElem) subjectCountElem.textContent = subjects.length;
-
-    const totalMinutes = remaining.reduce((acc, t) => acc + (Number(t.duration) || 0), 0);
-    const h = Math.floor(totalMinutes / 60);
-    const m = totalMinutes % 60;
-    
-    if (studyTimeElem) studyTimeElem.textContent = h > 0 ? `${h}h ${m}m` : `${m}m`;
-
-    const rate = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0;
-    if (completionRateElem) completionRateElem.textContent = `${rate}%`;
-}
-
-// AI Planner Logic
-function generatePlan() {
-    const topic = document.getElementById("studyTopic").value.trim();
-    const deadline = document.getElementById("deadline").value;
-    const hours = Number(document.getElementById("dailyHours").value);
-    const difficulty = document.getElementById("difficulty").value;
-
-    if (!topic || !deadline) return alert("Please fill in both topic and target deadline.");
-
-    const days = Math.max(1, Math.ceil((new Date(deadline) - new Date()) / (1000 * 60 * 60 * 24)));
-    const studyDays = Math.min(days, 7);
-
-    const resultDiv = document.getElementById("generatedPlan");
-    resultDiv.innerHTML = "";
-
-    for (let i = 1; i <= studyDays; i++) {
-        const dayCard = document.createElement("div");
-        dayCard.className = "plan-day-card";
-        
-        let note = i === studyDays 
-            ? `Final review & mock questions for ${topic}.`
-            : `Focus study on ${topic} core concepts (Difficulty: ${difficulty}).`;
-
-        dayCard.innerHTML = `
-            <h4>Day ${i}</h4>
-            <p><i class="fa-regular fa-clock"></i> ${hours} hour(s)/day</p>
-            <p>${note}</p>
-        `;
-        resultDiv.appendChild(dayCard);
-    }
-
-    document.getElementById("planResult").classList.remove("hidden");
-
-    // Save as Task automatically
-    tasks.push({
-        id: Date.now(),
-        name: `Study Focus: ${topic}`,
-        duration: hours * 60,
-        completed: false
-    });
-    saveData();
-}
-
-// Persistence & Theme Toggle
-function saveData() {
-    localStorage.setItem("subjects", JSON.stringify(subjects));
-    localStorage.setItem("tasks", JSON.stringify(tasks));
 }
 
 function toggleTheme() {
-    const body = document.body;
-    const isLight = body.classList.toggle('light-mode');
-    document.getElementById('themeToggle').innerHTML = isLight 
-        ? `<i class="fa-solid fa-moon"></i> Dark Mode` 
-        : `<i class="fa-solid fa-sun"></i> Light Mode`;
-    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+    document.body.classList.toggle('light-mode');
 }
 
-// Initial Boot
-document.addEventListener('DOMContentLoaded', () => {
-    if (localStorage.getItem('theme') === 'light') {
-        document.body.classList.add('light-mode');
-        document.getElementById('themeToggle').innerHTML = `<i class="fa-solid fa-moon"></i> Dark Mode`;
-    }
+// --- BOOT PROCESS ---
+
+document.addEventListener('DOMContentLoaded', async () => {
+    // Purge residual local storage data completely on boot
+    try { localStorage.clear(); } catch(e) {}
+
+    // Fetch initial live data from Google Sheet
+    await loadDataFromSheet();
     navigateTo('home');
 });

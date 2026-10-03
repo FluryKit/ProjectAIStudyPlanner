@@ -1,0 +1,19 @@
+<section class="page-container">
+    <!-- Dynamic Workload Alert Banner -->
+    <div id="workloadAlert" class="alert-banner hidden">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <div>
+            <strong>Schedule Warning!</strong>
+            <p id="alertMessage">High study workload detected upcoming!</p>
+        </div>
+    </div>
+
+    <!-- Calendar View Header -->
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
+            <h3><i class="fa-solid fa-calendar-day"></i> Upcoming Deadlines</h3>
+            <span class="badge" id="countdownBadge">Calculating...</span>
+        </div>
+        <div id="calendarList"></div>
+    </div>
+</section>

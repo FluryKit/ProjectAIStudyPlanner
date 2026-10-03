@@ -1,0 +1,54 @@
+<section class="page-container">
+    <div class="hero-card">
+        <h2><i class="fa-solid fa-brain"></i> Smart Task Prioritization</h2>
+        <p class="text-secondary">AI automatically classifies your tasks into an urgency & priority matrix.</p>
+    </div>
+
+    <!-- Quick Add Task with Dynamic Subject Dropdown -->
+    <div class="card">
+        <h3>Add Task for AI Scoring</h3>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="taskTitle">Task Title</label>
+                <input type="text" id="taskTitle" placeholder="e.g., Practical Lab Prep">
+            </div>
+            <div class="form-group">
+                <label for="taskSubject">Subject</label>
+                <select id="taskSubject"></select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="taskDueDate">Due Date</label>
+                <input type="date" id="taskDueDate">
+            </div>
+            <div class="form-group">
+                <label for="taskImportance">Importance (1-5)</label>
+                <input type="number" id="taskImportance" min="1" max="5" value="3">
+            </div>
+        </div>
+        <button class="primary-button" onclick="addAndPrioritizeTask()">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Analyze & Add Task
+        </button>
+    </div>
+
+    <!-- Eisenhower Priority Matrix Grid -->
+    <div class="features-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+        <div class="card priority-quadrant">
+            <h4 style="margin-bottom: 12px;"><i class="fa-solid fa-fire" style="color: #e74c3c;"></i> Urgent & Important (Do First)</h4>
+            <div id="quad-do-first" class="task-list-container"></div>
+        </div>
+        <div class="card priority-quadrant">
+            <h4 style="margin-bottom: 12px;"><i class="fa-solid fa-calendar-check" style="color: #3498db;"></i> Schedule (Important, Not Urgent)</h4>
+            <div id="quad-schedule" class="task-list-container"></div>
+        </div>
+        <div class="card priority-quadrant">
+            <h4 style="margin-bottom: 12px;"><i class="fa-solid fa-bolt" style="color: #f39c12;"></i> Quick Finish (Urgent, Less Important)</h4>
+            <div id="quad-quick" class="task-list-container"></div>
+        </div>
+        <div class="card priority-quadrant">
+            <h4 style="margin-bottom: 12px;"><i class="fa-solid fa-mug-hot" style="color: #95a5a6;"></i> Can Wait</h4>
+            <div id="quad-wait" class="task-list-container"></div>
+        </div>
+    </div>
+</section>

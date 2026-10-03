@@ -1,0 +1,47 @@
+<section class="page-container">
+    <div class="hero-card" style="padding: 24px; text-align: left;">
+        <h2><i class="fa-solid fa-chart-pie"></i> Performance & Analytics</h2>
+        <p class="text-secondary">Keep track of your study streak and course completion progress.</p>
+    </div>
+
+    <!-- Key Metrics Stats Grid -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon-wrapper"><i class="fa-solid fa-clock"></i></div>
+            <div class="task-meta">Weekly Hours</div>
+            <h3 id="weeklyHoursVal">14.5 hrs</h3>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon-wrapper"><i class="fa-solid fa-circle-check"></i></div>
+            <div class="task-meta">Completed Tasks</div>
+            <h3 id="completedTasksVal">18 / 24</h3>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon-wrapper"><i class="fa-solid fa-chart-line"></i></div>
+            <div class="task-meta">Completion Rate</div>
+            <h3 id="completionRateVal">75%</h3>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon-wrapper"><i class="fa-solid fa-hourglass-half"></i></div>
+            <div class="task-meta">Upcoming (7 Days)</div>
+            <h3 id="upcomingCountVal">4</h3>
+        </div>
+    </div>
+
+    <!-- Subject Progress Progress Bars -->
+    <div class="card">
+        <h3>Subject Progress Breakdown</h3>
+        <div id="subjectProgressContainer" style="display: flex; flex-direction: column; gap: 16px; margin-top: 16px;">
+            <!-- Dynamically populated subject progress bars -->
+            <div>
+                <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 600; margin-bottom: 6px;">
+                    <span>Operating Systems</span>
+                    <span>80%</span>
+                </div>
+                <div style="background: var(--bg-subcard); height: 10px; border-radius: 6px; overflow: hidden;">
+                    <div style="background: var(--accent-sage); width: 80%; height: 100%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
