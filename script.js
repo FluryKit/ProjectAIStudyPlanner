@@ -1,6 +1,7 @@
 // State Management
 let subjects = JSON.parse(localStorage.getItem("subjects")) || [];
 let tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+let currentSubjectId = null;
 
 // Active View Router
 async function navigateTo(pageName) {
@@ -19,7 +20,10 @@ async function navigateTo(pageName) {
 
         // Initialize page-specific view models
         if (pageName === "dashboard") renderTasks();
-        if (pageName === "subjects") renderSubjects();
+        if (pageName === "subjects") {
+            currentSubjectId = null;
+            renderSubjects();
+        }
 
         window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
@@ -31,18 +35,23 @@ async function navigateTo(pageName) {
 function addSubject() {
     const nameInput = document.getElementById("subjectName");
     const diffInput = document.getElementById("subjectDifficulty");
-    const name = nameInput.value.trim();
+    const name = nameInput ? nameInput.value.trim() : "";
 
     if (!name) return alert("Please enter a subject name.");
 
-    subjects.push({ id: Date.now(), name, difficulty: diffInput.value });
+    subjects.push({ 
+        id: Date.now(), 
+        name, 
+        difficulty: diffInput ? diffInput.value : "Medium",
+        topics: [] 
+    });
     saveData();
-    nameInput.value = "";
+    if (nameInput) nameInput.value = "";
     renderSubjects();
 }
 
 function renderSubjects() {
-    const container = document.getElementById("subjectList");
+    const container = document.getElementById("subjectWidgetGrid");
     if (!container) return;
 
     if (subjects.length === 0) {
@@ -51,22 +60,199 @@ function renderSubjects() {
     }
 
     container.innerHTML = subjects.map(sub => `
-        <div class="subject-item">
+        <div class="subject-item" onclick="openSubjectDetail(${sub.id})" style="cursor: pointer;">
             <div>
                 <strong>${sub.name}</strong>
                 <span class="sub-badge">${sub.difficulty}</span>
             </div>
-            <button class="delete-btn" onclick="deleteSubject(${sub.id})">
+            <button class="delete-btn" onclick="deleteSubject(${sub.id}, event)">
                 <i class="fa-solid fa-trash"></i>
             </button>
         </div>
     `).join("");
 }
 
-function deleteSubject(id) {
+function deleteSubject(id, event) {
+    if (event) event.stopPropagation();
     subjects = subjects.filter(s => s.id !== id);
     saveData();
-    renderSubjects();
+    
+    if (currentSubjectId === id) {
+        closeSubjectDetail();
+    } else {
+        renderSubjects();
+    }
+}
+
+// Open / Close Subject Detail View
+function openSubjectDetail(subjectId) {
+    currentSubjectId = subjectId;
+    const overviewSec = document.getElementById("subjectOverviewSection");
+    const detailSec = document.getElementById("subjectDetailSection");
+
+    if (overviewSec && detailSec) {
+        overviewSec.classList.add("hidden");
+        detailSec.classList.remove("hidden");
+        renderSubjectDetail();
+    }
+}
+
+function closeSubjectDetail() {
+    currentSubjectId = null;
+    const overviewSec = document.getElementById("subjectOverviewSection");
+    const detailSec = document.getElementById("subjectDetailSection");
+
+    if (overviewSec && detailSec) {
+        detailSec.classList.add("hidden");
+        overviewSec.classList.remove("hidden");
+        renderSubjects();
+    }
+}
+
+// Render Topics & Uploaded Files inside Selected Subject
+function renderSubjectDetail() {
+    const container = document.getElementById("subjectDetailContent");
+    if (!container || !currentSubjectId) return;
+
+    const sub = subjects.find(s => s.id === currentSubjectId);
+    if (!sub) return closeSubjectDetail();
+
+    container.innerHTML = `
+        <div class="card subject-folder-card">
+            <div class="subject-header" style="margin-bottom: 20px;">
+                <h2><i class="fa-solid fa-folder-open"></i> ${sub.name}</h2>
+                <span class="sub-badge">${sub.difficulty || 'Medium'}</span>
+            </div>
+
+            <!-- Add Topic Form -->
+            <div class="add-topic-box" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <input type="text" id="topic-input-${sub.id}" placeholder="Add topic folder (e.g. Chapter 1)..." style="flex: 1;">
+                <button class="secondary-button" onclick="addTopic(${sub.id})">+ Add Topic</button>
+            </div>
+
+            <!-- List Topic Folders & Uploaded Files -->
+            <div class="topics-container">
+                ${(sub.topics || []).length === 0 
+                    ? `<p class="empty-text"><i class="fa-solid fa-folder-plus"></i> No topic folders yet. Create one above!</p>`
+                    : (sub.topics || []).map(topic => `
+                        <div class="topic-folder" style="margin-bottom: 20px; padding: 16px; border-radius: 8px; background: var(--bg-subcard);">
+                            <h4><i class="fa-solid fa-folder"></i> ${topic.name}</h4>
+                            
+                            <div class="upload-btn-wrapper" style="margin: 12px 0;">
+                                <label class="file-upload-label" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                                    <i class="fa-solid fa-file-arrow-up"></i> Upload PDF / Note
+                                    <input type="file" accept=".pdf,image/*" onchange="uploadFile(${sub.id},${topic.id}, event)" style="display: none;">
+                                </label>
+                            </div>
+
+                            <ul class="file-list" style="list-style: none; padding: 0;">
+                                ${(topic.files || []).map(file => `
+                                    <li style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-color);">
+                                        <!-- Open PDF via viewFile without triggering local download -->
+                                        <a href="javascript:void(0)" onclick="viewFile(${sub.id}, ${topic.id}, ${file.id})" style="text-decoration: none; color: inherit;">
+                                            <i class="fa-solid fa-file-pdf"></i> ${file.fileName}
+                                        </a>
+                                        <i class="fa-solid fa-xmark remove-file-icon" onclick="deleteFile(${sub.id}, ${topic.id}, ${file.id})" title="Delete File" style="cursor: pointer; color: #d9534f;"></i>
+                                    </li>
+                                `).join("")}
+                            </ul>
+                        </div>
+                    `).join("")
+                }
+            </div>
+        </div>
+    `;
+}
+
+// Convert Base64 data to Blob URL so browser opens viewer tab without downloading
+function viewFile(subjectId, topicId, fileId) {
+    const sub = subjects.find(s => s.id === subjectId);
+    if (!sub) return;
+    const topic = (sub.topics || []).find(t => t.id === topicId);
+    if (!topic) return;
+    const file = (topic.files || []).find(f => f.id === fileId);
+    if (!file || !file.fileData) return;
+
+    try {
+        const base64Parts = file.fileData.split(',');
+        const mimeMatch = base64Parts[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : 'application/pdf';
+
+        const byteCharacters = atob(base64Parts[1]);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+
+        const blob = new Blob([byteArray], { type: mime });
+        const blobUrl = URL.createObjectURL(blob);
+        
+        window.open(blobUrl, '_blank');
+    } catch (err) {
+        console.error("Error displaying file:", err);
+        alert("Failed to view file preview.");
+    }
+}
+
+// Add Topic inside Subject
+function addTopic(subjectId) {
+    const topicInput = document.getElementById(`topic-input-${subjectId}`);
+    const topicName = topicInput ? topicInput.value.trim() : "";
+    if (!topicName) return alert("Please enter a topic name.");
+
+    const subject = subjects.find(s => s.id === subjectId);
+    if (subject) {
+        if (!subject.topics) subject.topics = [];
+        subject.topics.push({
+            id: Date.now(),
+            name: topicName,
+            files: []
+        });
+        saveData();
+        renderSubjectDetail();
+    }
+}
+
+// Upload File Handler
+function uploadFile(subjectId, topicId, event) {
+    const fileInput = event.target;
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        let resultData = e.target.result;
+
+        const subject = subjects.find(s => s.id === subjectId);
+        if (subject) {
+            const topic = (subject.topics || []).find(t => t.id === topicId);
+            if (topic) {
+                if (!topic.files) topic.files = [];
+                topic.files.push({
+                    id: Date.now(),
+                    fileName: file.name,
+                    fileData: resultData
+                });
+                saveData();
+                renderSubjectDetail();
+            }
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+// Delete File
+function deleteFile(subjectId, topicId, fileId) {
+    const subject = subjects.find(s => s.id === subjectId);
+    if (subject) {
+        const topic = (subject.topics || []).find(t => t.id === topicId);
+        if (topic) {
+            topic.files = topic.files.filter(f => f.id !== fileId);
+            saveData();
+            renderSubjectDetail();
+        }
+    }
 }
 
 // Task Management
@@ -157,7 +343,6 @@ function generatePlan() {
 
     document.getElementById("planResult").classList.remove("hidden");
 
-    // Save as Task automatically
     tasks.push({
         id: Date.now(),
         name: `Study Focus: ${topic}`,
@@ -176,9 +361,8 @@ function saveData() {
 function toggleTheme() {
     const body = document.body;
     const isLight = body.classList.toggle('light-mode');
-    document.getElementById('themeToggle').innerHTML = isLight 
-        ? `<i class="fa-solid fa-moon"></i> Dark Mode` 
-        : `<i class="fa-solid fa-sun"></i> Light Mode`;
+    const checkbox = document.getElementById('checkbox');
+    if (checkbox) checkbox.checked = isLight;
     localStorage.setItem('theme', isLight ? 'light' : 'dark');
 }
 
@@ -186,7 +370,8 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', () => {
     if (localStorage.getItem('theme') === 'light') {
         document.body.classList.add('light-mode');
-        document.getElementById('themeToggle').innerHTML = `<i class="fa-solid fa-moon"></i> Dark Mode`;
+        const checkbox = document.getElementById('checkbox');
+        if (checkbox) checkbox.checked = true;
     }
     navigateTo('home');
 });

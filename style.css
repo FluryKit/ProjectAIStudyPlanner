@@ -411,3 +411,116 @@ input, select, textarea {
         width: 240px;
     }
 }
+
+/* ====================================
+   Additional Custom Feature Styles
+   ==================================== */
+
+/* Folder & Sub-topic UI */
+.sub-badge {
+    background: var(--accent-soft);
+    color: var(--accent-sage);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 12px;
+    margin-left: 8px;
+}
+
+.subject-folder-card { margin-bottom: 20px; }
+.subject-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.add-topic-box { display: flex; gap: 8px; margin-bottom: 16px; }
+.topics-container { display: flex; flex-direction: column; gap: 12px; }
+.topic-folder {
+    background: var(--bg-subcard);
+    padding: 14px;
+    border-radius: 8px;
+    border-left: 4px solid var(--accent-sage);
+}
+.file-upload-label { display: inline-block; cursor: pointer; font-size: 12px; color: var(--accent-sage); margin: 8px 0; font-weight: 600; }
+.file-upload-label input { display: none; }
+.file-list { list-style: none; margin-top: 6px; }
+.file-list li { display: flex; gap: 8px; align-items: center; font-size: 13px; margin-bottom: 4px; padding: 4px 0; }
+.file-list a { color: var(--text-primary); text-decoration: none; word-break: break-all; }
+.file-list li > a:first-child { flex: 1; min-width: 0; }
+.file-download-link { flex: none; color: var(--accent-sage) !important; }
+.remove-file-icon { cursor: pointer; color: #d9534f; margin-left: 8px; }
+
+/* Pomodoro Timer Styling */
+.pomodoro-card { text-align: center; max-width: 500px; margin: 0 auto; }
+.timer-clock { font-size: 64px; font-weight: 800; color: var(--accent-sage); margin: 20px 0; font-variant-numeric: tabular-nums; }
+.timer-controls { display: flex; gap: 12px; justify-content: center; }
+
+/* 3-Column Subject Widget Grid Layout */
+.subject-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+@media (max-width: 900px) {
+    .subject-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .subject-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Individual Subject Widget Card */
+.subject-widget-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 18px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.subject-widget-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--accent-sage);
+}
+
+.widget-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.widget-icon {
+    font-size: 28px;
+    color: var(--accent-sage);
+}
+
+.widget-body {
+    margin-bottom: 16px;
+}
+
+.widget-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: var(--text-primary);
+}
+
+.widget-footer {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-secondary);
+    border-top: 1px solid var(--border-color);
+    padding-top: 10px;
+}
+
+.back-nav-bar {
+    margin-bottom: 16px;
+}
