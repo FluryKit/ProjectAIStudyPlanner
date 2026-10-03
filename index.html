@@ -29,11 +29,20 @@
             <button class="nav-btn" data-page="planner" onclick="navigateTo('planner')">
                 <i class="fa-solid fa-wand-magic-sparkles"></i> AI Planner
             </button>
-            
-            <button id="themeToggle" class="theme-toggle-btn" onclick="toggleTheme()">
-                <i class="fa-solid fa-sun"></i> Light Mode
-            </button>
         </nav>
+
+        <!-- Square Lamp Switch with Dynamic Inner Icon -->
+        <div class="theme-switch-wrapper">
+            <label class="theme-switch" for="checkbox">
+                <input type="checkbox" id="checkbox" onchange="toggleTheme()" />
+                <div class="slider square">
+                    <div class="slider-knob">
+                        <i class="fa-solid fa-moon icon-dark"></i>
+                        <i class="fa-solid fa-sun icon-light"></i>
+                    </div>
+                </div>
+            </label>
+        </div>
     </header>
 
     <!-- Dynamic content loaded here -->

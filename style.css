@@ -31,6 +31,28 @@ body {
     line-height: 1.6;
 }
 
+/* Header Overlay on Landing Screen */
+body:has(.sketch-landing-container) .app-header {
+    background: transparent !important;
+    border-bottom: none !important;
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 1000;
+    padding: 24px 8%;
+}
+
+body:has(.sketch-landing-container) .app-nav,
+body:has(.sketch-landing-container) .app-footer {
+    display: none !important;
+}
+
+body:has(.sketch-landing-container) .main-content {
+    padding: 0 !important;
+    max-width: 100% !important;
+}
+
 /* Header & Nav */
 .app-header {
     background: var(--bg-header);
@@ -52,12 +74,78 @@ body {
     transition: all 0.2s ease;
 }
 .nav-btn:hover, .nav-btn.active { background: var(--bg-subcard); color: var(--text-primary); }
-.theme-toggle-btn {
-    border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);
-    padding: 8px 14px; border-radius: 20px; cursor: pointer; font-size: 13px; margin-left: 10px;
+
+/* Square Lamp Switch Container */
+.theme-switch-wrapper {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
 }
 
-/* Layout Container */
+.theme-switch {
+    display: inline-block;
+    height: 32px;
+    position: relative;
+    width: 60px;
+}
+
+.theme-switch input {
+    display: none;
+}
+
+/* Square Slider Track */
+.slider {
+    background-color: var(--bg-subcard);
+    border: 1px solid var(--border-color);
+    bottom: 0;
+    cursor: pointer;
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+    border-radius: 8px;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Square Sliding Knob */
+.slider-knob {
+    background-color: var(--accent-sage);
+    bottom: 3px;
+    height: 24px;
+    left: 3px;
+    position: absolute;
+    transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55), background-color 0.3s ease;
+    width: 24px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--bg-main);
+    font-size: 13px;
+}
+
+/* Icon Toggling inside Knob */
+.slider-knob .icon-light {
+    display: none;
+}
+.slider-knob .icon-dark {
+    display: inline-block;
+}
+
+/* Active Light Mode State (Shifted Right) */
+input:checked + .slider .slider-knob {
+    transform: translateX(28px);
+}
+
+input:checked + .slider .slider-knob .icon-dark {
+    display: none;
+}
+
+input:checked + .slider .slider-knob .icon-light {
+    display: inline-block;
+}
+
+/* Main Layout Container */
 .main-content { max-width: 960px; margin: 0 auto; padding: 40px 20px; }
 .page-container { animation: fadeIn 0.25s ease-in-out; }
 
@@ -133,34 +221,193 @@ input, select, textarea {
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
-.hero-layout {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 2rem;
-}
-
-.hero-content {
-    flex: 1;
-}
-
-.hero-media {
-    flex: 1;
+/* Sketch Landing Page - Locked Fullscreen & Single Viewport */
+.sketch-landing-container {
     display: flex;
     justify-content: center;
+    align-items: center;
+    height: 100vh;
+    width: 100vw;
+    padding: 20px;
+    background: var(--bg-main);
+    overflow: hidden;
+    position: relative;
 }
 
-.hero-image {
+.sketch-landing-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 100%;
-    max-width: 500px;
-    height: auto;
-    border-radius: 12px;
-    object-fit: cover;
+    max-width: 1100px;
+    gap: 1rem;
+    margin: 0 auto;
 }
 
-/* Stack vertically on smaller screens */
+/* Text Column */
+.sketch-text-col {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    z-index: 2;
+    transform: translateY(15px);
+}
+
+.sketch-title {
+    font-size: 88px;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.tilted-exclamation {
+    display: inline-block;
+    color: var(--accent-sage);
+    font-size: 96px;
+    transform: rotate(18deg) translateY(-4px);
+    transform-origin: center;
+}
+
+.sketch-subtitle {
+    font-size: 38px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+/* Small Sub-Description */
+.sketch-desc {
+    font-size: 13.5px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    max-width: 380px;
+    margin-bottom: 20px;
+    opacity: 0.9;
+}
+
+/* Speech Bubble Action Buttons */
+.sketch-actions {
+    display: flex;
+    align-items: center;
+    gap: 36px;
+    flex-wrap: wrap;
+}
+
+.speech-bubble {
+    position: relative;
+    background: transparent;
+    color: var(--text-primary);
+    border: 2px solid var(--text-primary);
+    border-radius: 50px;
+    font-size: 20px;
+    font-weight: 700;
+    padding: 12px 28px;
+    cursor: pointer;
+    transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+/* Standardized Speech Bubble Tails */
+.speech-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -10px;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 10px 8px 0 8px;
+    border-color: var(--text-primary) transparent transparent transparent;
+}
+
+.speech-bubble::before {
+    content: '';
+    position: absolute;
+    bottom: -7px;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 8px 7px 0 7px;
+    border-color: var(--bg-main) transparent transparent transparent;
+    z-index: 1;
+}
+
+/* Tail alignment for "yeah!" (Left side) */
+.yeah-bubble::after { left: 28px; }
+.yeah-bubble::before { left: 29px; }
+
+/* Tail alignment for "Nah, not today" (Right side) */
+.nah-bubble::after { right: 28px; }
+.nah-bubble::before { right: 29px; }
+
+.speech-bubble:hover {
+    transform: scale(1.05);
+    background: var(--bg-subcard);
+}
+
+/* Mascot Column */
+.sketch-mascot-col {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transform: translateY(-25px);
+}
+
+.sketch-mascot-img {
+    width: 480px;
+    max-width: 100%;
+    height: auto;
+    object-fit: contain;
+}
+
+/* Mobile Responsiveness */
 @media (max-width: 768px) {
-    .hero-layout {
-        flex-direction: column;
+    body:has(.sketch-landing-container) .app-header {
+        padding: 16px 20px;
+    }
+
+    .sketch-landing-content {
+        flex-direction: column-reverse;
+        text-align: center;
+        gap: 1.5rem;
+    }
+
+    .sketch-text-col,
+    .sketch-mascot-col {
+        transform: none;
+    }
+
+    .sketch-text-col {
+        align-items: center;
+    }
+
+    .sketch-title {
+        font-size: 52px;
+        justify-content: center;
+    }
+
+    .tilted-exclamation {
+        font-size: 58px;
+    }
+
+    .sketch-subtitle {
+        font-size: 28px;
+        margin-bottom: 6px;
+    }
+
+    .sketch-desc {
+        font-size: 13px;
+        margin-bottom: 20px;
+    }
+
+    .sketch-actions {
+        justify-content: center;
+        gap: 20px;
+    }
+
+    .sketch-mascot-img {
+        width: 240px;
     }
 }
