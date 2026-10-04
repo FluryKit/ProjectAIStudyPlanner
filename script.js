@@ -1,9 +1,60 @@
-// State Management
-let subjects = JSON.parse(localStorage.getItem("subjects")) || [];
-let tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+// Google Apps Script API Endpoint
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzth-z3eP-UaXf3NwKj9x2a-k7eGcopkf81wXIVCkiYiKQZmAwsUJ5wZUqkpPE2MuuiWw/exec";
+
+// In-Memory App State (Zero LocalStorage)
+let subjects = [];
+let tasks = [];
 let currentSubjectId = null;
 
-// Active View Router
+// --- GOOGLE SHEETS API SYNC HELPERS ---
+
+async function loadDataFromSheet() {
+    if (!APPS_SCRIPT_URL) return;
+
+    try {
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=getData`);
+        if (!response.ok) throw new Error("Failed to load data from Google Sheets.");
+        
+        const data = await response.json();
+        tasks = data.tasks || [];
+        subjects = data.subjects || [];
+    } catch (err) {
+        console.error("Error fetching data from backend:", err);
+    }
+}
+
+async function syncTaskToSheet(task) {
+    if (!APPS_SCRIPT_URL) return;
+
+    try {
+        await fetch(APPS_SCRIPT_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "saveTask", ...task })
+        });
+    } catch (err) {
+        console.error("Error saving task to Google Sheets:", err);
+    }
+}
+
+async function syncSubjectToSheet(subject) {
+    if (!APPS_SCRIPT_URL) return;
+
+    try {
+        await fetch(APPS_SCRIPT_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "saveSubject", ...subject })
+        });
+    } catch (err) {
+        console.error("Error saving subject to Google Sheets:", err);
+    }
+}
+
+// --- ACTIVE VIEW ROUTER ---
+
 async function navigateTo(pageName) {
     const container = document.getElementById("app-container");
     
@@ -31,21 +82,25 @@ async function navigateTo(pageName) {
     }
 }
 
-// Subject Management
-function addSubject() {
+// --- SUBJECT MANAGEMENT ---
+
+async function addSubject() {
     const nameInput = document.getElementById("subjectName");
     const diffInput = document.getElementById("subjectDifficulty");
     const name = nameInput ? nameInput.value.trim() : "";
 
     if (!name) return alert("Please enter a subject name.");
 
-    subjects.push({ 
+    const newSubject = { 
         id: Date.now(), 
         name, 
         difficulty: diffInput ? diffInput.value : "Medium",
         topics: [] 
-    });
-    saveData();
+    };
+
+    subjects.push(newSubject);
+    await syncSubjectToSheet(newSubject);
+
     if (nameInput) nameInput.value = "";
     renderSubjects();
 }
@@ -72,10 +127,21 @@ function renderSubjects() {
     `).join("");
 }
 
-function deleteSubject(id, event) {
+async function deleteSubject(id, event) {
     if (event) event.stopPropagation();
     subjects = subjects.filter(s => s.id !== id);
-    saveData();
+    
+    // Deletion sync request
+    if (APPS_SCRIPT_URL) {
+        try {
+            await fetch(APPS_SCRIPT_URL, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "deleteSubject", id })
+            });
+        } catch(e) {}
+    }
     
     if (currentSubjectId === id) {
         closeSubjectDetail();
@@ -84,7 +150,8 @@ function deleteSubject(id, event) {
     }
 }
 
-// Open / Close Subject Detail View
+// --- SUBJECT DETAILS & TOPICS ---
+
 function openSubjectDetail(subjectId) {
     currentSubjectId = subjectId;
     const overviewSec = document.getElementById("subjectOverviewSection");
@@ -109,7 +176,6 @@ function closeSubjectDetail() {
     }
 }
 
-// Render Topics & Uploaded Files inside Selected Subject
 function renderSubjectDetail() {
     const container = document.getElementById("subjectDetailContent");
     if (!container || !currentSubjectId) return;
@@ -148,7 +214,6 @@ function renderSubjectDetail() {
                             <ul class="file-list" style="list-style: none; padding: 0;">
                                 ${(topic.files || []).map(file => `
                                     <li style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-color);">
-                                        <!-- Open PDF via viewFile without triggering local download -->
                                         <a href="javascript:void(0)" onclick="viewFile(${sub.id}, ${topic.id}, ${file.id})" style="text-decoration: none; color: inherit;">
                                             <i class="fa-solid fa-file-pdf"></i> ${file.fileName}
                                         </a>
@@ -164,7 +229,6 @@ function renderSubjectDetail() {
     `;
 }
 
-// Convert Base64 data to Blob URL so browser opens viewer tab without downloading
 function viewFile(subjectId, topicId, fileId) {
     const sub = subjects.find(s => s.id === subjectId);
     if (!sub) return;
@@ -195,8 +259,7 @@ function viewFile(subjectId, topicId, fileId) {
     }
 }
 
-// Add Topic inside Subject
-function addTopic(subjectId) {
+async function addTopic(subjectId) {
     const topicInput = document.getElementById(`topic-input-${subjectId}`);
     const topicName = topicInput ? topicInput.value.trim() : "";
     if (!topicName) return alert("Please enter a topic name.");
@@ -209,19 +272,18 @@ function addTopic(subjectId) {
             name: topicName,
             files: []
         });
-        saveData();
+        await syncSubjectToSheet(subject);
         renderSubjectDetail();
     }
 }
 
-// Upload File Handler
-function uploadFile(subjectId, topicId, event) {
+async function uploadFile(subjectId, topicId, event) {
     const fileInput = event.target;
     const file = fileInput.files[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = async function(e) {
         let resultData = e.target.result;
 
         const subject = subjects.find(s => s.id === subjectId);
@@ -234,7 +296,7 @@ function uploadFile(subjectId, topicId, event) {
                     fileName: file.name,
                     fileData: resultData
                 });
-                saveData();
+                await syncSubjectToSheet(subject);
                 renderSubjectDetail();
             }
         }
@@ -242,25 +304,25 @@ function uploadFile(subjectId, topicId, event) {
     reader.readAsDataURL(file);
 }
 
-// Delete File
-function deleteFile(subjectId, topicId, fileId) {
+async function deleteFile(subjectId, topicId, fileId) {
     const subject = subjects.find(s => s.id === subjectId);
     if (subject) {
         const topic = (subject.topics || []).find(t => t.id === topicId);
         if (topic) {
             topic.files = topic.files.filter(f => f.id !== fileId);
-            saveData();
+            await syncSubjectToSheet(subject);
             renderSubjectDetail();
         }
     }
 }
 
-// Task Management
-function toggleTask(id) {
+// --- TASK MANAGEMENT ---
+
+async function toggleTask(id) {
     const task = tasks.find(t => t.id === id);
     if (task) {
         task.completed = !task.completed;
-        saveData();
+        await syncTaskToSheet(task);
         renderTasks();
     }
 }
@@ -310,8 +372,9 @@ function updateStats() {
     if (completionRateElem) completionRateElem.textContent = `${rate}%`;
 }
 
-// AI Planner Logic
-function generatePlan() {
+// --- AI PLANNER LOGIC ---
+
+async function generatePlan() {
     const topic = document.getElementById("studyTopic").value.trim();
     const deadline = document.getElementById("deadline").value;
     const hours = Number(document.getElementById("dailyHours").value);
@@ -343,35 +406,33 @@ function generatePlan() {
 
     document.getElementById("planResult").classList.remove("hidden");
 
-    tasks.push({
+    const newTask = {
         id: Date.now(),
         name: `Study Focus: ${topic}`,
         duration: hours * 60,
         completed: false
-    });
-    saveData();
+    };
+
+    tasks.push(newTask);
+    await syncTaskToSheet(newTask);
 }
 
-// Persistence & Theme Toggle
-function saveData() {
-    localStorage.setItem("subjects", JSON.stringify(subjects));
-    localStorage.setItem("tasks", JSON.stringify(tasks));
-}
+// --- THEME TOGGLE ---
 
 function toggleTheme() {
     const body = document.body;
     const isLight = body.classList.toggle('light-mode');
     const checkbox = document.getElementById('checkbox');
     if (checkbox) checkbox.checked = isLight;
-    localStorage.setItem('theme', isLight ? 'light' : 'dark');
 }
 
-// Initial Boot
-document.addEventListener('DOMContentLoaded', () => {
-    if (localStorage.getItem('theme') === 'light') {
-        document.body.classList.add('light-mode');
-        const checkbox = document.getElementById('checkbox');
-        if (checkbox) checkbox.checked = true;
-    }
+// --- INITIAL BOOT ---
+
+document.addEventListener('DOMContentLoaded', async () => {
+    // Purge browser local storage
+    try { localStorage.clear(); } catch(e) {}
+
+    // Fetch live data directly from Google Sheet before rendering
+    await loadDataFromSheet();
     navigateTo('home');
 });
