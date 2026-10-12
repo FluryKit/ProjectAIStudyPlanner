@@ -7,6 +7,8 @@ let tasks = [];
 let currentSubjectId = null;
 let pomodoroSeconds = 25 * 60;
 let pomodoroInterval = null;
+let plannerMaterialMatches = [];
+let activePlannerMaterialIndex = -1;
 
 // --- GOOGLE SHEETS API SYNC HELPERS ---
 
@@ -213,14 +215,20 @@ function handleGlobalSearch(event) {
 
     const matches = findSearchMatches(query).slice(0, 6);
     results.innerHTML = matches.length
-        ? matches.map((match, index) => `<button class="search-result-item" role="option" data-result-index="${index}"
-            onclick="openSearchResult(${JSON.stringify(match.type)}, ${match.id}, ${match.parentId ?? "null"}, ${match.topicId ?? "null"})">
+        ? matches.map((match, index) => `<button class="search-result-item" role="option" data-result-index="${index}">
             <span class="search-result-icon"><i class="fa-solid ${match.icon}"></i></span>
             <span class="search-result-copy"><strong>${escapeHtml(match.title)}</strong><small>${escapeHtml(match.subtitle)}</small></span>
             <i class="fa-solid fa-arrow-up-right-from-square search-result-arrow"></i>
         </button>`).join("")
         : `<p class="search-no-results">No matches yet. Try a subject, topic, or task name.</p>`;
     results.classList.remove("hidden");
+    results.querySelectorAll("[data-result-index]").forEach(button => {
+        button.addEventListener("click", () => openSearchResult(...searchResultArguments(matches[Number(button.dataset.resultIndex)])));
+    });
+}
+
+function searchResultArguments(match) {
+    return [match.type, match.id, match.parentId ?? null, match.topicId ?? null];
 }
 
 function handleSearchKeydown(event) {
@@ -243,18 +251,18 @@ function findSearchMatches(query) {
             matches.push({ type: "subject", id: subject.id, title: subject.name, subtitle: `${subject.difficulty || "Subject"} · Course`, icon: "fa-book-open" });
         }
         (subject.topics || []).forEach(topic => {
-            if (String(topic.name || "").toLocaleLowerCase().includes(normalizedQuery)) {
+            if (`${topic.name || ""} ${subject.name || ""}`.toLocaleLowerCase().includes(normalizedQuery)) {
                 matches.push({ type: "topic", id: topic.id, parentId: subject.id, title: topic.name, subtitle: `Topic in ${subject.name}`, icon: "fa-folder" });
             }
             (topic.files || []).forEach(file => {
-                if (String(file.fileName || "").toLocaleLowerCase().includes(normalizedQuery)) {
+                if (`${file.fileName || ""} ${topic.name || ""} ${subject.name || ""}`.toLocaleLowerCase().includes(normalizedQuery)) {
                     matches.push({ type: "file", id: file.id, parentId: subject.id, topicId: topic.id, title: file.fileName, subtitle: `Material in ${subject.name} · ${topic.name}`, icon: "fa-file-lines" });
                 }
             });
         });
     });
     tasks.forEach(task => {
-        if (String(task.name || "").toLocaleLowerCase().includes(normalizedQuery)) {
+        if (`${task.name || ""} ${task.description || ""}`.toLocaleLowerCase().includes(normalizedQuery)) {
             matches.push({ type: "task", id: task.id, title: task.name, subtitle: task.deadline ? `Task · Due ${formatDeadline(task.deadline)}` : "Study task", icon: "fa-list-check" });
         }
     });
@@ -263,9 +271,16 @@ function findSearchMatches(query) {
 
 async function openSearchResult(type, id, parentId = null, topicId = null) {
     if (type === "task") {
-        await navigateTo("dashboard");
-        const task = document.getElementById(`task-${id}`);
-        if (task) task.closest(".task-item").scrollIntoView({ behavior: "smooth", block: "center" });
+        const taskRecord = tasks.find(task => String(task.id) === String(id));
+        if (taskRecord && taskRecord.completed) {
+            await navigateTo("progress");
+            const historyItem = document.getElementById(`history-task-${id}`);
+            if (historyItem) historyItem.scrollIntoView({ behavior: "smooth", block: "center" });
+        } else {
+            await navigateTo("dashboard");
+            const task = document.getElementById(`task-${id}`);
+            if (task) task.closest(".task-item").scrollIntoView({ behavior: "smooth", block: "center" });
+        }
         return;
     }
 
@@ -286,7 +301,8 @@ function showSearchResults(query) {
     const matches = findSearchMatches(query);
     document.getElementById("searchResults").classList.add("hidden");
     document.querySelectorAll(".nav-btn").forEach(btn => btn.classList.remove("active"));
-    document.getElementById("app-container").innerHTML = `
+    const resultsContainer = document.getElementById("app-container");
+    resultsContainer.innerHTML = `
         <section class="page-container">
             <div class="welcome-header">
                 <p class="small-tag"><i class="fa-solid fa-magnifying-glass"></i> Search</p>
@@ -294,13 +310,16 @@ function showSearchResults(query) {
                 <p>${matches.length} matching ${matches.length === 1 ? "result" : "results"} across your study space.</p>
             </div>
             <div class="search-page-results">
-                ${matches.length ? matches.map(match => `<button class="search-page-result" onclick="openSearchResult(${JSON.stringify(match.type)}, ${match.id}, ${match.parentId ?? "null"}, ${match.topicId ?? "null"})">
+                ${matches.length ? matches.map((match, index) => `<button class="search-page-result" data-result-index="${index}">
                     <span class="search-result-icon"><i class="fa-solid ${match.icon}"></i></span>
                     <span class="search-result-copy"><strong>${escapeHtml(match.title)}</strong><small>${escapeHtml(match.subtitle)}</small></span>
                     <i class="fa-solid fa-arrow-right"></i>
                 </button>`).join("") : `<div class="card search-empty-state"><i class="fa-regular fa-face-meh"></i><h2>No results found</h2><p>Try another keyword, or create a new subject or study task.</p></div>`}
             </div>
         </section>`;
+    resultsContainer.querySelectorAll("[data-result-index]").forEach(button => {
+        button.addEventListener("click", () => openSearchResult(...searchResultArguments(matches[Number(button.dataset.resultIndex)])));
+    });
 }
 
 // --- SUBJECT MANAGEMENT ---
@@ -374,7 +393,9 @@ async function deleteSubject(id, event) {
 // --- SUBJECT DETAILS & TOPICS ---
 
 function openSubjectDetail(subjectId) {
-    currentSubjectId = subjectId;
+    const subject = subjects.find(item => String(item.id) === String(subjectId));
+    if (!subject) return;
+    currentSubjectId = subject.id;
     const overviewSec = document.getElementById("subjectOverviewSection");
     const detailSec = document.getElementById("subjectDetailSection");
 
@@ -401,7 +422,7 @@ function renderSubjectDetail() {
     const container = document.getElementById("subjectDetailContent");
     if (!container || !currentSubjectId) return;
 
-    const sub = subjects.find(s => s.id === currentSubjectId);
+    const sub = subjects.find(s => String(s.id) === String(currentSubjectId));
     if (!sub) return closeSubjectDetail();
 
     container.innerHTML = `
@@ -543,8 +564,14 @@ async function toggleTask(id) {
     const task = tasks.find(t => t.id === id);
     if (task) {
         task.completed = !task.completed;
+        if (task.completed) {
+            task.completedAt = new Date().toISOString();
+        } else {
+            delete task.completedAt;
+        }
         await syncTaskToSheet(task);
         renderTasks();
+        renderProgress();
         updateNotifications();
     }
 }
@@ -553,17 +580,19 @@ function renderTasks() {
     const container = document.getElementById("taskList");
     if (!container) return;
 
-    if (tasks.length === 0) {
-        container.innerHTML = `<p class="empty-text"><i class="fa-solid fa-inbox"></i> No tasks found. Create one with AI Planner!</p>`;
+    const activeTasks = tasks.filter(task => !task.completed);
+    if (activeTasks.length === 0) {
+        container.innerHTML = `<div class="task-empty-state"><span class="task-empty-icon"><i class="fa-solid fa-mug-hot"></i></span><strong>You're all caught up</strong><p>Your active tasks will show up here. Take a breather or plan your next study session.</p><button class="dashboard-new-task" onclick="navigateTo('planner')"><i class="fa-solid fa-plus"></i><span>Plan a study task</span></button></div>`;
         updateStats();
         return;
     }
 
-    container.innerHTML = tasks.map(task => `
-        <div class="task-item ${task.completed ? 'completed' : ''}">
-            <input type="checkbox" id="task-${task.id}" ${task.completed ? 'checked' : ''} onchange="toggleTask(${task.id})">
+    container.innerHTML = activeTasks.map(task => `
+        <div class="task-item">
+            <input type="checkbox" id="task-${task.id}" onchange="toggleTask(${task.id})" aria-label="Mark ${escapeHtml(task.name)} as complete">
             <label for="task-${task.id}" class="task-details">
                 <span class="task-title">${escapeHtml(task.name)}</span>
+                ${task.description ? `<span class="task-description">${escapeHtml(task.description)}</span>` : ""}
                 <span class="task-meta"><i class="fa-regular fa-clock"></i> ${Number(task.duration) || 0} mins${task.deadline ? ` <span class="task-deadline"><i class="fa-regular fa-calendar"></i> Due ${formatDeadline(task.deadline)}</span>` : ""}</span>
             </label>
         </div>
@@ -573,15 +602,13 @@ function renderTasks() {
 }
 
 function updateStats() {
-    const remaining = tasks.filter(t => !t.completed);
-    const completedCount = tasks.length - remaining.length;
-    
+    const remaining = tasks.filter(task => !task.completed);
     const studyTimeElem = document.getElementById("studyTime");
-    const completedStatElem = document.getElementById("completedStat");
+    const activeTaskElem = document.getElementById("activeTaskStat");
     const completionRateElem = document.getElementById("completionRate");
     const subjectCountElem = document.getElementById("subjectCount");
 
-    if (completedStatElem) completedStatElem.textContent = `${completedCount} / ${tasks.length}`;
+    if (activeTaskElem) activeTaskElem.textContent = remaining.length;
     if (subjectCountElem) subjectCountElem.textContent = subjects.length;
 
     const totalMinutes = remaining.reduce((acc, t) => acc + (Number(t.duration) || 0), 0);
@@ -590,7 +617,7 @@ function updateStats() {
     
     if (studyTimeElem) studyTimeElem.textContent = h > 0 ? `${h}h ${m}m` : `${m}m`;
 
-    const rate = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0;
+    const rate = tasks.length ? Math.round((tasks.filter(task => task.completed).length / tasks.length) * 100) : 0;
     if (completionRateElem) completionRateElem.textContent = `${rate}%`;
 
     const alertBanner = document.getElementById("deadlineAlert");
@@ -687,16 +714,18 @@ function renderProgress() {
     const container = document.getElementById("progressSummary");
     if (!container) return;
 
-    const completedCount = tasks.filter(task => task.completed).length;
-    const remainingCount = tasks.length - completedCount;
+    const completedTasks = tasks.filter(task => task.completed);
+    const activeTasks = tasks.filter(task => !task.completed);
+    const completedCount = completedTasks.length;
+    const remainingCount = activeTasks.length;
     const rate = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0;
-    const totalMinutes = tasks.filter(task => task.completed).reduce((total, task) => total + (Number(task.duration) || 0), 0);
+    const totalMinutes = completedTasks.reduce((total, task) => total + (Number(task.duration) || 0), 0);
     const completedHours = Math.floor(totalMinutes / 60);
     const completedMinutes = totalMinutes % 60;
 
     container.innerHTML = `
         <div class="progress-stats-grid">
-            <article class="progress-stat-card"><span class="stat-icon-wrapper"><i class="fa-solid fa-list-check"></i></span><strong>${tasks.length}</strong><span>Planned tasks</span></article>
+            <article class="progress-stat-card"><span class="stat-icon-wrapper"><i class="fa-solid fa-list-check"></i></span><strong>${remainingCount}</strong><span>Active tasks</span></article>
             <article class="progress-stat-card"><span class="stat-icon-wrapper"><i class="fa-solid fa-circle-check"></i></span><strong>${completedCount}</strong><span>Tasks completed</span></article>
             <article class="progress-stat-card"><span class="stat-icon-wrapper"><i class="fa-solid fa-hourglass-half"></i></span><strong>${completedHours}h ${completedMinutes}m</strong><span>Focused time completed</span></article>
             <article class="progress-stat-card"><span class="stat-icon-wrapper"><i class="fa-solid fa-book-open"></i></span><strong>${subjects.length}</strong><span>Active subjects</span></article>
@@ -706,6 +735,29 @@ function renderProgress() {
             <div class="progress-track" role="progressbar" aria-label="Task completion" aria-valuenow="${rate}" aria-valuemin="0" aria-valuemax="100"><span style="width: ${rate}%"></span></div>
             <p class="muted-text">${completedCount} completed · ${remainingCount} still to go. Every focused session counts.</p>
         </section>`;
+
+    const history = document.getElementById("completedTaskHistory");
+    const historyCount = document.getElementById("historyCount");
+    if (!history || !historyCount) return;
+    const orderedHistory = completedTasks.slice().sort((a, b) => {
+        const dateA = Date.parse(a.completedAt) || 0;
+        const dateB = Date.parse(b.completedAt) || 0;
+        return dateB - dateA;
+    });
+    historyCount.textContent = String(orderedHistory.length);
+    history.innerHTML = orderedHistory.length
+        ? orderedHistory.map(task => `<article class="history-task-item" id="history-task-${task.id}">
+            <span class="history-task-check"><i class="fa-solid fa-check"></i></span>
+            <div class="history-task-copy">
+                <strong>${escapeHtml(task.name)}</strong>
+                ${task.description ? `<p>${escapeHtml(task.description)}</p>` : ""}
+                <span>${task.completedAt ? `Completed ${new Date(task.completedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}` : "Completed task"} · ${Number(task.duration) || 0} min</span>
+            </div>
+            <button class="history-restore-button" onclick="toggleTask(${task.id})" aria-label="Restore ${escapeHtml(task.name)} to dashboard">
+                <i class="fa-solid fa-arrow-rotate-left"></i><span>Restore</span>
+            </button>
+        </article>`).join("")
+        : `<div class="history-empty-state"><i class="fa-regular fa-folder-open"></i><p>Completed tasks will be saved here. You can restore one to your dashboard any time.</p></div>`;
 }
 
 function renderPomodoro() {
@@ -767,13 +819,185 @@ function resetPomodoro() {
 
 // --- AI PLANNER LOGIC ---
 
+function getPlannerMaterials() {
+    const materials = [];
+    subjects.forEach(subject => {
+        materials.push({
+            value: `subject:${subject.id}`,
+            title: subject.name,
+            detail: `Course · ${subject.difficulty || "Medium"}`,
+            subjectId: subject.id,
+            difficulty: subject.difficulty || "Medium"
+        });
+        (subject.topics || []).forEach(topic => {
+            materials.push({
+                value: `topic:${subject.id}:${topic.id}`,
+                title: topic.name,
+                detail: `Topic · ${subject.name}`,
+                subjectId: subject.id,
+                topicId: topic.id,
+                difficulty: subject.difficulty || "Medium"
+            });
+            (topic.files || []).forEach(file => {
+                materials.push({
+                    value: `file:${subject.id}:${topic.id}:${file.id}`,
+                    title: file.fileName,
+                    detail: `${subject.name} · ${topic.name}`,
+                    subjectId: subject.id,
+                    topicId: topic.id,
+                    materialId: file.id,
+                    difficulty: subject.difficulty || "Medium"
+                });
+            });
+        });
+    });
+    return materials;
+}
+
+function renderPlannerMaterials(searchText = "") {
+    const input = document.getElementById("studyMaterialSearch");
+    if (!input) return;
+
+    const query = (typeof searchText === "string" ? searchText : input.value).trim().toLocaleLowerCase();
+    const picker = document.getElementById("plannerMaterialResults");
+    const selectedValue = document.getElementById("studyMaterial").value;
+    if (selectedValue) return;
+
+    const allMaterials = getPlannerMaterials();
+    plannerMaterialMatches = allMaterials.filter(material =>
+        `${material.title} ${material.detail}`.toLocaleLowerCase().includes(query)
+    );
+    activePlannerMaterialIndex = -1;
+
+    const groups = [
+        ["Courses", plannerMaterialMatches.filter(material => material.value.startsWith("subject:"))],
+        ["Topics", plannerMaterialMatches.filter(material => material.value.startsWith("topic:"))],
+        ["Uploaded materials", plannerMaterialMatches.filter(material => material.value.startsWith("file:"))]
+    ].filter(([, items]) => items.length).map(([label, items]) => `
+        <div class="material-result-group">
+            <p>${label}</p>
+            ${items.map(material => {
+                const index = plannerMaterialMatches.indexOf(material);
+                return `<button type="button" class="material-result-option" role="option" aria-selected="false" data-material-index="${index}">
+                    <span class="material-result-icon"><i class="fa-solid ${material.value.startsWith("file:") ? "fa-file-lines" : material.value.startsWith("topic:") ? "fa-folder" : "fa-book-open"}"></i></span>
+                    <span><strong>${escapeHtml(material.title)}</strong><small>${escapeHtml(material.detail)}</small></span>
+                </button>`;
+            }).join("")}
+        </div>
+    `).join("");
+    const customMatches = !query || "custom topic".includes(query) || "custom".includes(query);
+    const customOption = customMatches
+        ? `<button type="button" class="material-result-option material-custom-option" role="option" aria-selected="false" data-material-index="${plannerMaterialMatches.length}">
+            <span class="material-result-icon"><i class="fa-solid fa-pen"></i></span>
+            <span><strong>Create a custom topic</strong><small>Plan a topic that isn't in your materials</small></span>
+        </button>`
+        : "";
+
+    picker.innerHTML = groups || customOption
+        ? `${groups}${customOption}`
+        : `<p class="material-no-results">No matching subjects or materials. You can still create a custom topic.</p>${`<button type="button" class="material-result-option material-custom-option" role="option" aria-selected="false" data-material-index="${plannerMaterialMatches.length}">
+            <span class="material-result-icon"><i class="fa-solid fa-pen"></i></span>
+            <span><strong>Create a custom topic</strong><small>Plan a topic that isn't in your materials</small></span>
+        </button>`}`;
+    picker.classList.remove("hidden");
+    input.setAttribute("aria-expanded", "true");
+    picker.querySelectorAll("[data-material-index]").forEach(button => {
+        button.addEventListener("click", () => selectPlannerMaterial(Number(button.dataset.materialIndex)));
+    });
+}
+
+function handlePlannerMaterialSearch(event) {
+    const input = event.target;
+    const selectedValue = document.getElementById("studyMaterial");
+    if (event.type === "focus" && selectedValue.value) {
+        selectedValue.value = "";
+        input.value = "";
+        document.getElementById("studyMaterialHint").textContent = "Start typing to find a course, topic, or uploaded material. You can also create a custom topic.";
+    }
+    if (selectedValue.value) selectedValue.value = "";
+    document.getElementById("customStudyTopic").classList.add("hidden");
+    document.getElementById("customStudyTopic").required = false;
+    renderPlannerMaterials(input.value);
+}
+
+function handlePlannerMaterialKeydown(event) {
+    const picker = document.getElementById("plannerMaterialResults");
+    const options = [...picker.querySelectorAll("[data-material-index]")];
+    if (event.key === "Escape") {
+        picker.classList.add("hidden");
+        event.target.setAttribute("aria-expanded", "false");
+        activePlannerMaterialIndex = -1;
+        return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const increment = event.key === "ArrowDown" ? 1 : -1;
+        activePlannerMaterialIndex = (activePlannerMaterialIndex + increment + options.length) % options.length;
+        options.forEach((option, index) => {
+            option.classList.toggle("is-active", index === activePlannerMaterialIndex);
+            option.setAttribute("aria-selected", String(index === activePlannerMaterialIndex));
+        });
+    } else if (event.key === "Enter" && !picker.classList.contains("hidden")) {
+        const active = options[activePlannerMaterialIndex >= 0 ? activePlannerMaterialIndex : 0];
+        if (active) {
+            event.preventDefault();
+            active.click();
+        }
+    }
+}
+
+function selectPlannerMaterial(index) {
+    const input = document.getElementById("studyMaterialSearch");
+    const hiddenInput = document.getElementById("studyMaterial");
+    const customTopic = document.getElementById("customStudyTopic");
+    const picker = document.getElementById("plannerMaterialResults");
+    const material = plannerMaterialMatches[index];
+    const isCustom = index === plannerMaterialMatches.length;
+
+    if (isCustom) {
+        hiddenInput.value = "custom";
+        input.value = "";
+        input.placeholder = "Custom study topic";
+        customTopic.classList.remove("hidden");
+        customTopic.required = true;
+        customTopic.focus();
+    } else if (material) {
+        hiddenInput.value = material.value;
+        input.value = material.title;
+        input.placeholder = "Search your subjects and materials...";
+        customTopic.classList.add("hidden");
+        customTopic.required = false;
+        document.getElementById("difficulty").value = material.difficulty;
+    } else {
+        return;
+    }
+
+    picker.classList.add("hidden");
+    input.setAttribute("aria-expanded", "false");
+    document.getElementById("studyMaterialHint").textContent = isCustom
+        ? "Enter the name of your custom study topic above."
+        : `Selected ${material.title}${material.detail ? ` · ${material.detail}` : ""}.`;
+}
+
+function closePlannerMaterialResults() {
+    const picker = document.getElementById("plannerMaterialResults");
+    const input = document.getElementById("studyMaterialSearch");
+    if (!picker || !input) return;
+    picker.classList.add("hidden");
+    input.setAttribute("aria-expanded", "false");
+}
+
 async function generatePlan() {
-    const topic = document.getElementById("studyTopic").value.trim();
+    const selection = document.getElementById("studyMaterial").value;
+    const material = getPlannerMaterials().find(item => item.value === selection);
+    const customTopic = document.getElementById("customStudyTopic").value.trim();
+    const topic = selection === "custom" ? customTopic : material ? material.title : "";
+    const description = document.getElementById("studyDescription").value.trim();
     const deadline = document.getElementById("deadline").value;
     const hours = Number(document.getElementById("dailyHours").value);
     const difficulty = document.getElementById("difficulty").value;
 
-    if (!topic || !deadline) return alert("Please fill in both topic and target deadline.");
+    if (!topic || !deadline) return alert("Please choose a subject or material and set a target deadline.");
 
     const deadlineDate = parseDeadline(deadline);
     if (!deadlineDate) return alert("Please choose a valid target deadline.");
@@ -790,8 +1014,8 @@ async function generatePlan() {
         dayCard.className = "plan-day-card";
         
         let note = i === studyDays 
-            ? `Final review & mock questions for ${escapeHtml(topic)}.`
-            : `Focus study on ${escapeHtml(topic)} core concepts (Difficulty: ${escapeHtml(difficulty)}).`;
+            ? `Final review & practice for ${escapeHtml(topic)}.${description ? ` ${escapeHtml(description)}` : ""}`
+            : `Focus on ${escapeHtml(topic)}${description ? `: ${escapeHtml(description)}` : " core concepts"} (Difficulty: ${escapeHtml(difficulty)}).`;
 
         dayCard.innerHTML = `
             <h4>Day ${i}</h4>
@@ -802,13 +1026,22 @@ async function generatePlan() {
     }
 
     document.getElementById("planResult").classList.remove("hidden");
+    document.getElementById("generatedPlanDescription").textContent = description
+        ? `For ${topic}: ${description}`
+        : `A gentle, structured plan for ${topic}.`;
 
     const newTask = {
         id: Date.now(),
         name: `Study Focus: ${topic}`,
         duration: hours * 60,
         completed: false,
-        deadline
+        deadline,
+        description,
+        ...(material ? {
+            subjectId: material.subjectId,
+            ...(material.topicId ? { topicId: material.topicId } : {}),
+            ...(material.materialId ? { materialId: material.materialId } : {})
+        } : {})
     };
 
     tasks.push(newTask);
@@ -845,6 +1078,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         if (!event.target.closest(".search-container")) {
             document.getElementById("searchResults").classList.add("hidden");
+        }
+        if (!event.target.closest(".material-picker")) {
+            closePlannerMaterialResults();
         }
     });
     navigateTo('home');

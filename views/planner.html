@@ -7,8 +7,23 @@
 
     <div class="card">
         <div class="form-group">
-            <label for="studyTopic">What do you need to study?</label>
-            <textarea id="studyTopic" rows="3" placeholder="Example: Review RSA Algorithm and Database Normalization..."></textarea>
+            <label for="studyMaterialSearch">What would you like to study?</label>
+            <div class="material-picker">
+                <i class="fa-solid fa-magnifying-glass material-picker-icon"></i>
+                <input type="search" id="studyMaterialSearch" placeholder="Type a subject or material, e.g. IMK..." autocomplete="off"
+                    role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="plannerMaterialResults"
+                    oninput="handlePlannerMaterialSearch(event)" onkeydown="handlePlannerMaterialKeydown(event)"
+                    onfocus="handlePlannerMaterialSearch(event)">
+                <input type="hidden" id="studyMaterial">
+                <div class="material-picker-results hidden" id="plannerMaterialResults" role="listbox"></div>
+            </div>
+            <input type="text" id="customStudyTopic" class="hidden planner-custom-topic" placeholder="Enter a study topic" aria-label="Custom study topic">
+            <p class="form-hint" id="studyMaterialHint">Start typing to find a course, topic, or uploaded material. You can also create a custom topic.</p>
+        </div>
+
+        <div class="form-group">
+            <label for="studyDescription">Description <span class="optional-label">Optional</span></label>
+            <textarea id="studyDescription" rows="3" placeholder="Add a note to help you remember what to focus on..."></textarea>
         </div>
 
         <div class="form-row">
@@ -43,6 +58,7 @@
 
     <div id="planResult" class="card hidden">
         <h2><i class="fa-solid fa-calendar-check"></i> Generated Schedule</h2>
+        <p class="generated-plan-description" id="generatedPlanDescription"></p>
         <div id="generatedPlan" class="generated-plan-container"></div>
     </div>
 </section>

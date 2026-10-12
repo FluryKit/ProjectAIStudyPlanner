@@ -27,8 +27,8 @@
         <div class="stat-card">
             <div class="stat-icon-wrapper"><i class="fa-solid fa-circle-check"></i></div>
             <div class="stat-info">
-                <h2 id="completedStat">0 / 0</h2>
-                <p>Completed Tasks</p>
+                <h2 id="activeTaskStat">0</h2>
+                <p>Active Tasks</p>
             </div>
         </div>
 
@@ -54,8 +54,8 @@
         <div class="card column-main">
             <div class="section-title">
                 <h2><i class="fa-solid fa-list-check"></i> Study Tasks</h2>
-                <button onclick="navigateTo('planner')" class="small-button">
-                    <i class="fa-solid fa-plus"></i> New Task
+                <button onclick="navigateTo('planner')" class="dashboard-new-task">
+                    <i class="fa-solid fa-plus"></i><span>New task</span>
                 </button>
             </div>
             <div id="taskList" class="task-list"></div>
