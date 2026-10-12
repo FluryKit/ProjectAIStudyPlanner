@@ -5,6 +5,8 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzth-z3eP-UaXf3
 let subjects = [];
 let tasks = [];
 let currentSubjectId = null;
+let pomodoroSeconds = 25 * 60;
+let pomodoroInterval = null;
 
 // --- GOOGLE SHEETS API SYNC HELPERS ---
 
@@ -57,29 +59,248 @@ async function syncSubjectToSheet(subject) {
 
 async function navigateTo(pageName) {
     const container = document.getElementById("app-container");
-    
+
     try {
         const response = await fetch(`views/${pageName}.html`);
         if (!response.ok) throw new Error("Page not found");
         const html = await response.text();
         container.innerHTML = html;
 
-        // Update Nav UI
         document.querySelectorAll(".nav-btn").forEach(btn => {
             btn.classList.toggle("active", btn.dataset.page === pageName);
         });
 
-        // Initialize page-specific view models
+        if (pomodoroInterval) {
+            clearInterval(pomodoroInterval);
+            pomodoroInterval = null;
+        }
         if (pageName === "dashboard") renderTasks();
         if (pageName === "subjects") {
             currentSubjectId = null;
             renderSubjects();
         }
+        if (pageName === "calendar") renderCalendar();
+        if (pageName === "progress") renderProgress();
+        if (pageName === "pomodoro") renderPomodoro();
 
+        document.getElementById("appLayout").classList.remove("sidebar-open");
+        updateSidebarAccessibility();
+        document.getElementById("searchResults").classList.add("hidden");
+        document.getElementById("notificationPanel").classList.add("hidden");
+        document.getElementById("notificationButton").setAttribute("aria-expanded", "false");
         window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
+        console.error(`Error loading ${pageName} page:`, err);
         container.innerHTML = `<div class="card"><p>Error loading page view.</p></div>`;
     }
+}
+
+function toggleSidebar(forceClose = false) {
+    const layout = document.getElementById("appLayout");
+    if (forceClose) {
+        layout.classList.remove("sidebar-open");
+        updateSidebarAccessibility();
+        return;
+    }
+
+    if (window.matchMedia("(max-width: 760px)").matches) {
+        layout.classList.toggle("sidebar-open");
+    } else {
+        layout.classList.toggle("sidebar-collapsed");
+    }
+    updateSidebarAccessibility();
+}
+
+function updateSidebarAccessibility() {
+    const layout = document.getElementById("appLayout");
+    const mobile = window.matchMedia("(max-width: 760px)").matches;
+    const expanded = mobile
+        ? layout.classList.contains("sidebar-open")
+        : !layout.classList.contains("sidebar-collapsed");
+    const desktopToggle = document.querySelector(".sidebar-toggle");
+    const mobileToggle = document.querySelector(".mobile-menu-button");
+
+    desktopToggle.setAttribute("aria-expanded", String(expanded));
+    desktopToggle.setAttribute("aria-label", expanded ? "Collapse navigation" : "Expand navigation");
+    desktopToggle.title = expanded ? "Collapse navigation" : "Expand navigation";
+    mobileToggle.setAttribute("aria-expanded", String(expanded));
+    mobileToggle.setAttribute("aria-label", expanded ? "Close navigation" : "Open navigation");
+}
+
+function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, character => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+    })[character]);
+}
+
+function parseDeadline(deadline) {
+    if (!deadline || !/^\d{4}-\d{2}-\d{2}$/.test(deadline)) return null;
+    const [year, month, day] = deadline.split("-").map(Number);
+    const date = new Date(year, month - 1, day);
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+    return date;
+}
+
+function formatDeadline(deadline, options = { month: "short", day: "numeric" }) {
+    const date = parseDeadline(deadline);
+    return date ? date.toLocaleDateString(undefined, options) : "";
+}
+
+function getUpcomingTasks() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const end = new Date(today);
+    end.setDate(end.getDate() + 7);
+
+    return tasks
+        .filter(task => !task.completed && parseDeadline(task.deadline))
+        .map(task => ({ task, date: parseDeadline(task.deadline) }))
+        .filter(item => item.date <= end)
+        .sort((a, b) => a.date - b.date);
+}
+
+function updateNotifications() {
+    const badge = document.getElementById("notifBadge");
+    if (!badge) return;
+
+    const upcoming = getUpcomingTasks();
+    badge.textContent = upcoming.length > 9 ? "9+" : String(upcoming.length);
+    badge.classList.toggle("hidden", upcoming.length === 0);
+}
+
+function toggleNotifications() {
+    const panel = document.getElementById("notificationPanel");
+    const button = document.getElementById("notificationButton");
+    const isOpening = panel.classList.contains("hidden");
+    panel.classList.toggle("hidden", !isOpening);
+    button.setAttribute("aria-expanded", String(isOpening));
+
+    if (!isOpening) return;
+    const upcoming = getUpcomingTasks();
+    panel.innerHTML = `
+        <div class="notification-panel-heading">
+            <div><strong>Deadline reminders</strong><span>${upcoming.length} upcoming</span></div>
+            <button class="panel-close-button" onclick="toggleNotifications()" aria-label="Close reminders"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        ${upcoming.length
+            ? `<div class="notification-list">${upcoming.map(({ task, date }) => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const daysLeft = Math.round((date - today) / 86400000);
+                const label = daysLeft < 0 ? "Overdue" : daysLeft === 0 ? "Due today" : `Due in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
+                return `<button class="notification-item" onclick="openDeadline('${task.deadline}')">
+                    <span class="notification-dot"></span>
+                    <span><strong>${escapeHtml(task.name)}</strong><small>${label} · ${formatDeadline(task.deadline)}</small></span>
+                </button>`;
+            }).join("")}</div>`
+            : `<p class="notification-empty"><i class="fa-regular fa-circle-check"></i> You're all clear. No upcoming deadlines.</p>`}
+        <button class="notification-footer" onclick="navigateTo('calendar')">View calendar <i class="fa-solid fa-arrow-right"></i></button>
+    `;
+}
+
+function handleGlobalSearch(event) {
+    const query = event.target.value.trim();
+    const results = document.getElementById("searchResults");
+    if (!query) {
+        results.classList.add("hidden");
+        results.innerHTML = "";
+        return;
+    }
+
+    const matches = findSearchMatches(query).slice(0, 6);
+    results.innerHTML = matches.length
+        ? matches.map((match, index) => `<button class="search-result-item" role="option" data-result-index="${index}"
+            onclick="openSearchResult(${JSON.stringify(match.type)}, ${match.id}, ${match.parentId ?? "null"}, ${match.topicId ?? "null"})">
+            <span class="search-result-icon"><i class="fa-solid ${match.icon}"></i></span>
+            <span class="search-result-copy"><strong>${escapeHtml(match.title)}</strong><small>${escapeHtml(match.subtitle)}</small></span>
+            <i class="fa-solid fa-arrow-up-right-from-square search-result-arrow"></i>
+        </button>`).join("")
+        : `<p class="search-no-results">No matches yet. Try a subject, topic, or task name.</p>`;
+    results.classList.remove("hidden");
+}
+
+function handleSearchKeydown(event) {
+    if (event.key === "Escape") {
+        document.getElementById("searchResults").classList.add("hidden");
+        event.target.blur();
+    } else if (event.key === "Enter") {
+        event.preventDefault();
+        const query = event.target.value.trim();
+        if (query) showSearchResults(query);
+    }
+}
+
+function findSearchMatches(query) {
+    const normalizedQuery = query.toLocaleLowerCase();
+    const matches = [];
+
+    subjects.forEach(subject => {
+        if (String(subject.name || "").toLocaleLowerCase().includes(normalizedQuery)) {
+            matches.push({ type: "subject", id: subject.id, title: subject.name, subtitle: `${subject.difficulty || "Subject"} · Course`, icon: "fa-book-open" });
+        }
+        (subject.topics || []).forEach(topic => {
+            if (String(topic.name || "").toLocaleLowerCase().includes(normalizedQuery)) {
+                matches.push({ type: "topic", id: topic.id, parentId: subject.id, title: topic.name, subtitle: `Topic in ${subject.name}`, icon: "fa-folder" });
+            }
+            (topic.files || []).forEach(file => {
+                if (String(file.fileName || "").toLocaleLowerCase().includes(normalizedQuery)) {
+                    matches.push({ type: "file", id: file.id, parentId: subject.id, topicId: topic.id, title: file.fileName, subtitle: `Material in ${subject.name} · ${topic.name}`, icon: "fa-file-lines" });
+                }
+            });
+        });
+    });
+    tasks.forEach(task => {
+        if (String(task.name || "").toLocaleLowerCase().includes(normalizedQuery)) {
+            matches.push({ type: "task", id: task.id, title: task.name, subtitle: task.deadline ? `Task · Due ${formatDeadline(task.deadline)}` : "Study task", icon: "fa-list-check" });
+        }
+    });
+    return matches;
+}
+
+async function openSearchResult(type, id, parentId = null, topicId = null) {
+    if (type === "task") {
+        await navigateTo("dashboard");
+        const task = document.getElementById(`task-${id}`);
+        if (task) task.closest(".task-item").scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+    }
+
+    await navigateTo("subjects");
+    if (type === "file") {
+        openSubjectDetail(parentId);
+        const fileRow = document.getElementById(`file-${parentId}-${topicId}-${id}`);
+        if (fileRow) {
+            fileRow.classList.add("search-match-highlight");
+            fileRow.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+    } else {
+        openSubjectDetail(type === "topic" ? parentId : id);
+    }
+}
+
+function showSearchResults(query) {
+    const matches = findSearchMatches(query);
+    document.getElementById("searchResults").classList.add("hidden");
+    document.querySelectorAll(".nav-btn").forEach(btn => btn.classList.remove("active"));
+    document.getElementById("app-container").innerHTML = `
+        <section class="page-container">
+            <div class="welcome-header">
+                <p class="small-tag"><i class="fa-solid fa-magnifying-glass"></i> Search</p>
+                <h1>Results for “${escapeHtml(query)}”</h1>
+                <p>${matches.length} matching ${matches.length === 1 ? "result" : "results"} across your study space.</p>
+            </div>
+            <div class="search-page-results">
+                ${matches.length ? matches.map(match => `<button class="search-page-result" onclick="openSearchResult(${JSON.stringify(match.type)}, ${match.id}, ${match.parentId ?? "null"}, ${match.topicId ?? "null"})">
+                    <span class="search-result-icon"><i class="fa-solid ${match.icon}"></i></span>
+                    <span class="search-result-copy"><strong>${escapeHtml(match.title)}</strong><small>${escapeHtml(match.subtitle)}</small></span>
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>`).join("") : `<div class="card search-empty-state"><i class="fa-regular fa-face-meh"></i><h2>No results found</h2><p>Try another keyword, or create a new subject or study task.</p></div>`}
+            </div>
+        </section>`;
 }
 
 // --- SUBJECT MANAGEMENT ---
@@ -213,7 +434,7 @@ function renderSubjectDetail() {
 
                             <ul class="file-list" style="list-style: none; padding: 0;">
                                 ${(topic.files || []).map(file => `
-                                    <li style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-color);">
+                                    <li id="file-${sub.id}-${topic.id}-${file.id}" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-color);">
                                         <a href="javascript:void(0)" onclick="viewFile(${sub.id}, ${topic.id}, ${file.id})" style="text-decoration: none; color: inherit;">
                                             <i class="fa-solid fa-file-pdf"></i> ${file.fileName}
                                         </a>
@@ -324,6 +545,7 @@ async function toggleTask(id) {
         task.completed = !task.completed;
         await syncTaskToSheet(task);
         renderTasks();
+        updateNotifications();
     }
 }
 
@@ -341,8 +563,8 @@ function renderTasks() {
         <div class="task-item ${task.completed ? 'completed' : ''}">
             <input type="checkbox" id="task-${task.id}" ${task.completed ? 'checked' : ''} onchange="toggleTask(${task.id})">
             <label for="task-${task.id}" class="task-details">
-                <span class="task-title">${task.name}</span>
-                <span class="task-meta"><i class="fa-regular fa-clock"></i> ${task.duration} mins</span>
+                <span class="task-title">${escapeHtml(task.name)}</span>
+                <span class="task-meta"><i class="fa-regular fa-clock"></i> ${Number(task.duration) || 0} mins${task.deadline ? ` <span class="task-deadline"><i class="fa-regular fa-calendar"></i> Due ${formatDeadline(task.deadline)}</span>` : ""}</span>
             </label>
         </div>
     `).join("");
@@ -370,6 +592,177 @@ function updateStats() {
 
     const rate = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0;
     if (completionRateElem) completionRateElem.textContent = `${rate}%`;
+
+    const alertBanner = document.getElementById("deadlineAlert");
+    const closeDeadlines = getUpcomingTasks().filter(({ date }) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return Math.round((date - today) / 86400000) <= 3;
+    });
+    if (alertBanner) {
+        alertBanner.classList.toggle("hidden", closeDeadlines.length === 0);
+        if (closeDeadlines.length) {
+            const alertText = document.getElementById("deadlineAlertText");
+            if (alertText) {
+                alertText.textContent = closeDeadlines.some(({ date }) => date < new Date().setHours(0, 0, 0, 0))
+                    ? `You have ${closeDeadlines.length} overdue or soon-due task${closeDeadlines.length === 1 ? "" : "s"}. Check your calendar to plan your next step.`
+                    : `You have ${closeDeadlines.length} deadline${closeDeadlines.length === 1 ? "" : "s"} coming up within 3 days. Check your calendar to stay on track.`;
+            }
+        }
+    }
+    updateNotifications();
+}
+
+let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+function changeCalendarMonth(offset) {
+    calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + offset, 1);
+    renderCalendar();
+}
+
+function goToCurrentMonth() {
+    calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    renderCalendar();
+}
+
+async function openDeadline(deadline) {
+    await navigateTo("calendar");
+    const date = parseDeadline(deadline);
+    if (date) {
+        calendarMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+        renderCalendar();
+    }
+}
+
+function renderCalendar() {
+    const heading = document.getElementById("calendarMonthLabel");
+    const grid = document.getElementById("calendarGrid");
+    const list = document.getElementById("calendarDeadlineList");
+    if (!heading || !grid || !list) return;
+
+    heading.textContent = calendarMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+    const firstDayOffset = (new Date(year, month, 1).getDay() + 6) % 7;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const tasksByDate = new Map();
+    tasks.filter(task => !task.completed && parseDeadline(task.deadline)).forEach(task => {
+        if (!tasksByDate.has(task.deadline)) tasksByDate.set(task.deadline, []);
+        tasksByDate.get(task.deadline).push(task);
+    });
+
+    const cells = [];
+    for (let i = 0; i < firstDayOffset; i++) cells.push(`<span class="calendar-day calendar-day-empty" aria-hidden="true"></span>`);
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        const dayTasks = tasksByDate.get(dateKey) || [];
+        const dayClasses = ["calendar-day"];
+        if (dateKey === todayKey) dayClasses.push("is-today");
+        if (dayTasks.length) dayClasses.push("has-deadline");
+        cells.push(`<div class="${dayClasses.join(" ")}" ${dayTasks.length ? `title="${dayTasks.length} deadline${dayTasks.length === 1 ? "" : "s"}"` : ""}>
+            <span>${day}</span>${dayTasks.length ? `<span class="calendar-day-count">${dayTasks.length}</span>` : ""}
+        </div>`);
+    }
+    grid.innerHTML = cells.join("");
+
+    const monthTasks = tasks
+        .filter(task => !task.completed && parseDeadline(task.deadline))
+        .filter(task => {
+            const date = parseDeadline(task.deadline);
+            return date.getFullYear() === year && date.getMonth() === month;
+        })
+        .sort((a, b) => a.deadline.localeCompare(b.deadline));
+    list.innerHTML = monthTasks.length
+        ? monthTasks.map(task => `<div class="calendar-task-item">
+            <span class="calendar-task-date">${formatDeadline(task.deadline, { weekday: "short", month: "short", day: "numeric" })}</span>
+            <span class="calendar-task-name">${escapeHtml(task.name)}</span>
+            <span class="calendar-task-time">${Number(task.duration) || 0} min</span>
+        </div>`).join("")
+        : `<p class="empty-text"><i class="fa-regular fa-calendar"></i> No upcoming deadlines this month. Generate a plan to add a deadline.</p>`;
+}
+
+function renderProgress() {
+    const container = document.getElementById("progressSummary");
+    if (!container) return;
+
+    const completedCount = tasks.filter(task => task.completed).length;
+    const remainingCount = tasks.length - completedCount;
+    const rate = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0;
+    const totalMinutes = tasks.filter(task => task.completed).reduce((total, task) => total + (Number(task.duration) || 0), 0);
+    const completedHours = Math.floor(totalMinutes / 60);
+    const completedMinutes = totalMinutes % 60;
+
+    container.innerHTML = `
+        <div class="progress-stats-grid">
+            <article class="progress-stat-card"><span class="stat-icon-wrapper"><i class="fa-solid fa-list-check"></i></span><strong>${tasks.length}</strong><span>Planned tasks</span></article>
+            <article class="progress-stat-card"><span class="stat-icon-wrapper"><i class="fa-solid fa-circle-check"></i></span><strong>${completedCount}</strong><span>Tasks completed</span></article>
+            <article class="progress-stat-card"><span class="stat-icon-wrapper"><i class="fa-solid fa-hourglass-half"></i></span><strong>${completedHours}h ${completedMinutes}m</strong><span>Focused time completed</span></article>
+            <article class="progress-stat-card"><span class="stat-icon-wrapper"><i class="fa-solid fa-book-open"></i></span><strong>${subjects.length}</strong><span>Active subjects</span></article>
+        </div>
+        <section class="card progress-overview">
+            <div class="section-title"><div><p class="small-tag">YOUR MOMENTUM</p><h2>Task completion</h2></div><strong class="progress-rate">${rate}%</strong></div>
+            <div class="progress-track" role="progressbar" aria-label="Task completion" aria-valuenow="${rate}" aria-valuemin="0" aria-valuemax="100"><span style="width: ${rate}%"></span></div>
+            <p class="muted-text">${completedCount} completed · ${remainingCount} still to go. Every focused session counts.</p>
+        </section>`;
+}
+
+function renderPomodoro() {
+    updatePomodoroDisplay();
+    const startButton = document.getElementById("pomodoroStartButton");
+    if (startButton) startButton.innerHTML = `<i class="fa-solid fa-play"></i> Start focus`;
+}
+
+function updatePomodoroDisplay() {
+    const clock = document.getElementById("timerClock");
+    if (clock) {
+        const minutes = Math.floor(pomodoroSeconds / 60);
+        const seconds = pomodoroSeconds % 60;
+        clock.textContent = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    }
+}
+
+function togglePomodoro() {
+    const startButton = document.getElementById("pomodoroStartButton");
+    if (pomodoroInterval) {
+        clearInterval(pomodoroInterval);
+        pomodoroInterval = null;
+        if (startButton) startButton.innerHTML = `<i class="fa-solid fa-play"></i> Resume focus`;
+        return;
+    }
+
+    if (pomodoroSeconds <= 0) {
+        pomodoroSeconds = 25 * 60;
+        const status = document.getElementById("pomodoroStatus");
+        if (status) status.textContent = "One small focus sprint at a time.";
+    }
+    if (startButton) startButton.innerHTML = `<i class="fa-solid fa-pause"></i> Pause`;
+    pomodoroInterval = setInterval(() => {
+        pomodoroSeconds -= 1;
+        updatePomodoroDisplay();
+        if (pomodoroSeconds <= 0) {
+            clearInterval(pomodoroInterval);
+            pomodoroInterval = null;
+            const status = document.getElementById("pomodoroStatus");
+            if (status) status.textContent = "Focus session complete. Take a short break!";
+            if (startButton) startButton.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Start another`;
+            if ("Notification" in window && Notification.permission === "granted") {
+                new Notification("StudyNest focus session complete", { body: "Great work! Take a short break before your next session." });
+            }
+        }
+    }, 1000);
+}
+
+function resetPomodoro() {
+    if (pomodoroInterval) clearInterval(pomodoroInterval);
+    pomodoroInterval = null;
+    pomodoroSeconds = 25 * 60;
+    const status = document.getElementById("pomodoroStatus");
+    if (status) status.textContent = "One small focus sprint at a time.";
+    const startButton = document.getElementById("pomodoroStartButton");
+    if (startButton) startButton.innerHTML = `<i class="fa-solid fa-play"></i> Start focus`;
+    updatePomodoroDisplay();
 }
 
 // --- AI PLANNER LOGIC ---
@@ -382,7 +775,11 @@ async function generatePlan() {
 
     if (!topic || !deadline) return alert("Please fill in both topic and target deadline.");
 
-    const days = Math.max(1, Math.ceil((new Date(deadline) - new Date()) / (1000 * 60 * 60 * 24)));
+    const deadlineDate = parseDeadline(deadline);
+    if (!deadlineDate) return alert("Please choose a valid target deadline.");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const days = Math.max(1, Math.ceil((deadlineDate - today) / 86400000));
     const studyDays = Math.min(days, 7);
 
     const resultDiv = document.getElementById("generatedPlan");
@@ -393,8 +790,8 @@ async function generatePlan() {
         dayCard.className = "plan-day-card";
         
         let note = i === studyDays 
-            ? `Final review & mock questions for ${topic}.`
-            : `Focus study on ${topic} core concepts (Difficulty: ${difficulty}).`;
+            ? `Final review & mock questions for ${escapeHtml(topic)}.`
+            : `Focus study on ${escapeHtml(topic)} core concepts (Difficulty: ${escapeHtml(difficulty)}).`;
 
         dayCard.innerHTML = `
             <h4>Day ${i}</h4>
@@ -410,11 +807,13 @@ async function generatePlan() {
         id: Date.now(),
         name: `Study Focus: ${topic}`,
         duration: hours * 60,
-        completed: false
+        completed: false,
+        deadline
     };
 
     tasks.push(newTask);
     await syncTaskToSheet(newTask);
+    updateNotifications();
 }
 
 // --- THEME TOGGLE ---
@@ -422,17 +821,31 @@ async function generatePlan() {
 function toggleTheme() {
     const body = document.body;
     const isLight = body.classList.toggle('light-mode');
-    const checkbox = document.getElementById('checkbox');
-    if (checkbox) checkbox.checked = isLight;
+    document.querySelectorAll(".theme-switch input").forEach(checkbox => {
+        checkbox.checked = isLight;
+    });
 }
 
 // --- INITIAL BOOT ---
 
 document.addEventListener('DOMContentLoaded', async () => {
+    updateSidebarAccessibility();
+    window.addEventListener("resize", updateSidebarAccessibility);
+
     // Purge browser local storage
     try { localStorage.clear(); } catch(e) {}
 
     // Fetch live data directly from Google Sheet before rendering
     await loadDataFromSheet();
+    updateNotifications();
+    document.addEventListener("click", event => {
+        if (!event.target.closest(".notification-wrapper")) {
+            document.getElementById("notificationPanel").classList.add("hidden");
+            document.getElementById("notificationButton").setAttribute("aria-expanded", "false");
+        }
+        if (!event.target.closest(".search-container")) {
+            document.getElementById("searchResults").classList.add("hidden");
+        }
+    });
     navigateTo('home');
 });

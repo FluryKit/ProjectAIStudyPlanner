@@ -6,11 +6,12 @@
     </div>
 
     <!-- Alert Banner -->
-    <div class="alert-banner warning-alert">
+    <div class="alert-banner warning-alert hidden" id="deadlineAlert">
         <i class="fa-solid fa-triangle-exclamation alert-icon"></i>
         <div class="alert-content">
-            <strong>Schedule Warning:</strong> You have upcoming deadlines within 3 days. Focus on high priority items!
+            <strong>Coming up soon:</strong> <span id="deadlineAlertText"></span>
         </div>
+        <button class="alert-action" onclick="navigateTo('calendar')">View calendar <i class="fa-solid fa-arrow-right"></i></button>
     </div>
 
     <!-- Stats Grid -->

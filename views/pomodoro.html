@@ -1,0 +1,17 @@
+<section class="page-container">
+    <div class="welcome-header">
+        <p class="small-tag"><i class="fa-solid fa-stopwatch"></i> Focus gently</p>
+        <h1>Pomodoro Focus</h1>
+        <p>One focused sprint, then a little room to breathe.</p>
+    </div>
+    <section class="card pomodoro-card">
+        <span class="pomodoro-overline"><i class="fa-solid fa-leaf"></i> FOCUS SESSION</span>
+        <div class="timer-clock" id="timerClock" role="timer" aria-live="off">25:00</div>
+        <p class="pomodoro-caption" id="pomodoroStatus">One small focus sprint at a time.</p>
+        <div class="timer-controls">
+            <button class="primary-button timer-start-button" id="pomodoroStartButton" onclick="togglePomodoro()"><i class="fa-solid fa-play"></i> Start focus</button>
+            <button class="secondary-button timer-reset-button" onclick="resetPomodoro()"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+        </div>
+        <p class="pomodoro-hint"><i class="fa-regular fa-lightbulb"></i> Try putting away distractions until the timer ends.</p>
+    </section>
+</section>
