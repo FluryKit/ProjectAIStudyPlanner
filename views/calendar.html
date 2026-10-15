@@ -1,0 +1,39 @@
+<section class="page-container">
+    <div class="welcome-header page-heading-row">
+        <div>
+            <p class="small-tag"><i class="fa-regular fa-calendar"></i> Plan ahead</p>
+            <h1>Study Calendar</h1>
+            <p>Keep upcoming deadlines in view and make space for steady progress.</p>
+        </div>
+        <button class="primary-button heading-action" onclick="navigateTo('planner')"><i class="fa-solid fa-plus"></i> Plan a study task</button>
+    </div>
+
+    <div class="calendar-layout">
+        <section class="card calendar-card" aria-label="Monthly study calendar">
+            <div class="calendar-toolbar">
+                <div>
+                    <p class="small-tag">DEADLINES</p>
+                    <h2 id="calendarMonthLabel"></h2>
+                </div>
+                <div class="calendar-controls">
+                    <button class="icon-utility-btn" onclick="changeCalendarMonth(-1)" aria-label="Previous month"><i class="fa-solid fa-chevron-left"></i></button>
+                    <button class="secondary-button calendar-today-button" onclick="goToCurrentMonth()">Today</button>
+                    <button class="icon-utility-btn" onclick="changeCalendarMonth(1)" aria-label="Next month"><i class="fa-solid fa-chevron-right"></i></button>
+                </div>
+            </div>
+            <div class="calendar-grid calendar-weekdays" aria-hidden="true">
+                <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+            </div>
+            <div class="calendar-grid" id="calendarGrid" aria-label="Calendar dates"></div>
+            <div class="calendar-legend"><span></span> Study deadline</div>
+        </section>
+
+        <aside class="card calendar-deadlines-card">
+            <div class="section-title">
+                <div><p class="small-tag">STAY ON TRACK</p><h2>This month's deadlines</h2></div>
+                <i class="fa-solid fa-bell calendar-title-icon"></i>
+            </div>
+            <div id="calendarDeadlineList" class="calendar-deadline-list"></div>
+        </aside>
+    </div>
+</section>

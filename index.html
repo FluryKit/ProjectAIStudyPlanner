@@ -4,37 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StudyNest - AI Study Planner</title>
-    <!-- Font Awesome CDN -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-    <header class="app-header">
-        <div class="logo" onclick="navigateTo('home')">
+    <header class="app-header landing-header">
+        <button class="logo" onclick="navigateTo('home')" aria-label="StudyNest home">
             <i class="fa-solid fa-dove logo-icon"></i>
             <span>StudyNest</span>
-        </div>
-
-        <nav class="app-nav">
-            <button class="nav-btn active" data-page="home" onclick="navigateTo('home')">
-                <i class="fa-solid fa-house"></i> Home
-            </button>
-            <button class="nav-btn" data-page="dashboard" onclick="navigateTo('dashboard')">
-                <i class="fa-solid fa-chart-pie"></i> Dashboard
-            </button>
-            <button class="nav-btn" data-page="subjects" onclick="navigateTo('subjects')">
-                <i class="fa-solid fa-book-open"></i> Subjects
-            </button>
-            <button class="nav-btn" data-page="planner" onclick="navigateTo('planner')">
-                <i class="fa-solid fa-wand-magic-sparkles"></i> AI Planner
-            </button>
-        </nav>
-
-        <!-- Square Lamp Switch with Dynamic Inner Icon -->
-        <div class="theme-switch-wrapper">
-            <label class="theme-switch" for="checkbox">
-                <input type="checkbox" id="checkbox" onchange="toggleTheme()" />
+        </button>
+        <div class="theme-switch-wrapper" title="Toggle light or dark theme">
+            <label class="theme-switch" for="landingThemeCheckbox">
+                <input type="checkbox" id="landingThemeCheckbox" onchange="toggleTheme()">
                 <div class="slider square">
                     <div class="slider-knob">
                         <i class="fa-solid fa-moon icon-dark"></i>
@@ -44,14 +25,90 @@
             </label>
         </div>
     </header>
+    <div class="app-layout" id="appLayout">
+        <button class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar(true)" aria-label="Close navigation"></button>
+        <aside class="app-sidebar" id="appSidebar">
+            <div class="sidebar-heading">
+                <button class="sidebar-logo" onclick="navigateTo('home')" aria-label="StudyNest home">
+                    <i class="fa-solid fa-dove logo-icon"></i>
+                    <span>StudyNest</span>
+                </button>
+                <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Collapse navigation" aria-controls="appSidebar" aria-expanded="true" title="Collapse navigation">
+                    <i class="fa-solid fa-angles-left"></i>
+                </button>
+            </div>
 
-    <!-- Dynamic content loaded here -->
-    <main id="app-container" class="main-content"></main>
+            <p class="sidebar-label">STUDY SPACE</p>
+            <nav class="sidebar-nav" aria-label="Main navigation">
+                <button class="nav-btn" data-page="dashboard" onclick="navigateTo('dashboard')" aria-label="Dashboard" title="Dashboard">
+                    <i class="fa-solid fa-chart-pie"></i><span>Dashboard</span>
+                </button>
+                <button class="nav-btn" data-page="subjects" onclick="navigateTo('subjects')" aria-label="Courses and materials" title="Courses and materials">
+                    <i class="fa-solid fa-book-open"></i><span>Courses & Materials</span>
+                </button>
+                <button class="nav-btn" data-page="planner" onclick="navigateTo('planner')" aria-label="AI Study Planner" title="AI Study Planner">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i><span>AI Study Planner</span>
+                </button>
+                <button class="nav-btn" data-page="calendar" onclick="navigateTo('calendar')" aria-label="Calendar" title="Calendar">
+                    <i class="fa-solid fa-calendar-days"></i><span>Calendar</span>
+                </button>
+                <button class="nav-btn" data-page="progress" onclick="navigateTo('progress')" aria-label="Progress Tracking" title="Progress Tracking">
+                    <i class="fa-solid fa-chart-line"></i><span>Progress Tracking</span>
+                </button>
+                <button class="nav-btn" data-page="pomodoro" onclick="navigateTo('pomodoro')" aria-label="Pomodoro Focus" title="Pomodoro Focus">
+                    <i class="fa-solid fa-stopwatch"></i><span>Pomodoro Focus</span>
+                </button>
+            </nav>
 
-    <footer class="app-footer">
-        <p><i class="fa-solid fa-graduation-cap"></i> StudyNest AI &mdash; Empowering Smart Learning</p>
-    </footer>
+            <div class="sidebar-footer">
+                <i class="fa-solid fa-graduation-cap"></i>
+                <span>StudyNest AI</span>
+            </div>
+        </aside>
 
+        <div class="app-main-wrapper">
+            <header class="top-utility-bar">
+                <div class="topbar-leading">
+                    <button class="mobile-menu-button" onclick="toggleSidebar()" aria-label="Open navigation" aria-controls="appSidebar" aria-expanded="false">
+                        <i class="fa-solid fa-bars"></i>
+                    </button>
+                    <div class="search-container">
+                        <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                        <input type="search" id="globalSearchInput" placeholder="Search subjects, materials, topics, tasks..." autocomplete="off"
+                            aria-label="Search subjects, materials, topics, and tasks" aria-controls="searchResults"
+                            oninput="handleGlobalSearch(event)" onkeydown="handleSearchKeydown(event)">
+                        <kbd class="search-shortcut">Enter</kbd>
+                        <div class="search-results hidden" id="searchResults" role="listbox"></div>
+                    </div>
+                </div>
+
+                <div class="utility-actions">
+                    <div class="notification-wrapper">
+                        <button class="icon-utility-btn" id="notificationButton" onclick="toggleNotifications()" title="Deadline reminders"
+                            aria-label="Deadline reminders" aria-expanded="false" aria-controls="notificationPanel">
+                            <i class="fa-regular fa-bell"></i>
+                            <span class="notification-badge hidden" id="notifBadge">0</span>
+                        </button>
+                        <div class="notification-panel hidden" id="notificationPanel"></div>
+                    </div>
+                    <span class="utility-divider"></span>
+                    <div class="theme-switch-wrapper" title="Toggle light or dark theme">
+                        <label class="theme-switch" for="checkbox">
+                            <input type="checkbox" id="checkbox" onchange="toggleTheme()">
+                            <div class="slider square">
+                                <div class="slider-knob">
+                                    <i class="fa-solid fa-moon icon-dark"></i>
+                                    <i class="fa-solid fa-sun icon-light"></i>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </header>
+
+            <main id="app-container" class="main-content"></main>
+        </div>
+    </div>
     <script src="script.js"></script>
 </body>
 </html>

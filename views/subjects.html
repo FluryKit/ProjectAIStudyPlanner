@@ -1,34 +1,37 @@
-<section class="page-container">
-    <div class="welcome-header">
-        <p class="small-tag"><i class="fa-solid fa-folder-open"></i> Management</p>
-        <h1>My Subjects</h1>
-        <p>Organize courses and track course difficulty levels.</p>
-    </div>
-
-    <div class="card">
-        <h2><i class="fa-solid fa-folder-plus"></i> Add Subject</h2>
-        
-        <div class="form-group">
-            <label for="subjectName">Subject Name</label>
-            <input type="text" id="subjectName" placeholder="e.g. Cryptography">
+<div class="page-container">
+    <!-- View 1: Subject Widget Grid & Add Form -->
+    <div id="subjectOverviewSection">
+        <div class="card">
+            <h2><i class="fa-solid fa-folder-plus"></i> Add Subject</h2>
+            <div class="form-row" style="margin-top: 16px;">
+                <div class="form-group">
+                    <label>Subject Name</label>
+                    <input type="text" id="subjectName" placeholder="e.g. Operating Systems">
+                </div>
+                <div class="form-group">
+                    <label>Difficulty Level</label>
+                    <select id="subjectDifficulty">
+                        <option value="Easy">Easy</option>
+                        <option value="Medium" selected>Medium</option>
+                        <option value="Hard">Hard</option>
+                    </select>
+                </div>
+            </div>
+            <button class="primary-button" onclick="addSubject()">+ Add Subject</button>
         </div>
 
-        <div class="form-group">
-            <label for="subjectDifficulty">Difficulty Level</label>
-            <select id="subjectDifficulty">
-                <option value="Easy">Easy</option>
-                <option value="Medium" selected>Medium</option>
-                <option value="Hard">Hard</option>
-            </select>
+        <h3 style="margin-bottom: 16px;"><i class="fa-solid fa-layer-group"></i> My Subjects</h3>
+        <!-- 3-Column Widget Grid Container -->
+        <div id="subjectWidgetGrid" class="subject-grid"></div>
+    </div>
+
+    <!-- View 2: Detailed Subject Folder View (Initially Hidden) -->
+    <div id="subjectDetailSection" class="hidden">
+        <div class="back-nav-bar">
+            <button class="secondary-button" onclick="closeSubjectDetail()">
+                <i class="fa-solid fa-arrow-left"></i> Back to Subjects
+            </button>
         </div>
-
-        <button class="primary-button" onclick="addSubject()">
-            <i class="fa-solid fa-plus"></i> Add Subject
-        </button>
+        <div id="subjectDetailContent"></div>
     </div>
-
-    <div class="card">
-        <h2><i class="fa-solid fa-layer-group"></i> Active Subjects</h2>
-        <div id="subjectList" class="subject-list"></div>
-    </div>
-</section>
+</div>
