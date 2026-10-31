@@ -10,6 +10,16 @@
             <div><p class="small-tag">YOUR STUDY JOURNEY</p><h2>Completed task history</h2><p class="muted-text">Finished tasks live here. You can restore any task to your dashboard.</p></div>
             <span class="history-count" id="historyCount">0</span>
         </div>
+        <div class="history-toolbar">
+            <label for="historyFilter">Filter</label>
+            <select id="historyFilter" onchange="setCompletedHistoryFilter(this.value)">
+                <option value="all">All time</option>
+                <option value="month">This month</option>
+                <option value="30days">Last 30 days</option>
+                <option value="7days">Last 7 days</option>
+                <option value="today">Today</option>
+            </select>
+        </div>
         <div id="completedTaskHistory" class="completed-task-history"></div>
     </section>
     <div class="progress-next-step">

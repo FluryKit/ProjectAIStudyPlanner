@@ -10,6 +10,7 @@ let pomodoroInterval = null;
 let plannerMaterialMatches = [];
 let activePlannerMaterialIndex = -1;
 let notificationReadIds = new Set();
+let completedHistoryFilter = "all";
 
 // --- LOCAL STORAGE PERSISTENCE ---
 
@@ -491,8 +492,15 @@ function renderSubjects() {
 
 async function deleteSubject(id, event) {
     if (event) event.stopPropagation();
-    subjects = subjects.filter(s => s.id !== id);
-    
+    const subject = subjects.find(s => String(s.id) === String(id));
+    if (!subject) return;
+
+    const confirmed = window.confirm(`Delete the subject "${subject.name}" and all its topics/files?`);
+    if (!confirmed) return;
+
+    subjects = subjects.filter(s => String(s.id) !== String(id));
+    saveAppState();
+
     // Deletion sync request
     if (APPS_SCRIPT_URL) {
         try {
@@ -566,7 +574,17 @@ function renderSubjectDetail() {
                     ? `<p class="empty-text"><i class="fa-solid fa-folder-plus"></i> No topic folders yet. Create one above!</p>`
                     : (sub.topics || []).map(topic => `
                         <div class="topic-folder" style="margin-bottom: 20px; padding: 16px; border-radius: 8px; background: var(--bg-subcard);">
-                            <h4><i class="fa-solid fa-folder"></i> ${topic.name}</h4>
+                            <div class="topic-folder-header">
+                                <h4><i class="fa-solid fa-folder"></i> ${topic.name}</h4>
+                                <div class="topic-folder-actions">
+                                    <button type="button" class="topic-action-button" onclick="renameTopic(${sub.id}, ${topic.id}, event)" aria-label="Rename ${escapeHtml(topic.name)}">
+                                        <i class="fa-solid fa-pencil"></i>
+                                    </button>
+                                    <button type="button" class="topic-action-button danger" onclick="deleteTopic(${sub.id}, ${topic.id}, event)" aria-label="Delete ${escapeHtml(topic.name)}">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
                             
                             <div class="upload-btn-wrapper" style="margin: 12px 0;">
                                 <label class="file-upload-label" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
@@ -628,7 +646,7 @@ async function addTopic(subjectId) {
     const topicName = topicInput ? topicInput.value.trim() : "";
     if (!topicName) return alert("Please enter a topic name.");
 
-    const subject = subjects.find(s => s.id === subjectId);
+    const subject = subjects.find(s => String(s.id) === String(subjectId));
     if (subject) {
         if (!subject.topics) subject.topics = [];
         subject.topics.push({
@@ -639,6 +657,46 @@ async function addTopic(subjectId) {
         await syncSubjectToSheet(subject);
         renderSubjectDetail();
     }
+}
+
+async function renameTopic(subjectId, topicId, event) {
+    if (event) event.stopPropagation();
+    const subject = subjects.find(s => String(s.id) === String(subjectId));
+    if (!subject) return;
+
+    const topic = (subject.topics || []).find(t => String(t.id) === String(topicId));
+    if (!topic) return;
+
+    const nextName = window.prompt("Rename topic:", topic.name);
+    if (nextName === null) return;
+
+    const cleanedName = nextName.trim();
+    if (!cleanedName) {
+        alert("Topic name cannot be empty.");
+        return;
+    }
+
+    topic.name = cleanedName;
+    saveAppState();
+    await syncSubjectToSheet(subject);
+    renderSubjectDetail();
+}
+
+async function deleteTopic(subjectId, topicId, event) {
+    if (event) event.stopPropagation();
+    const subject = subjects.find(s => String(s.id) === String(subjectId));
+    if (!subject) return;
+
+    const topic = (subject.topics || []).find(t => String(t.id) === String(topicId));
+    if (!topic) return;
+
+    const confirmed = window.confirm(`Delete the topic "${topic.name}" and all uploaded files inside it?`);
+    if (!confirmed) return;
+
+    subject.topics = (subject.topics || []).filter(t => String(t.id) !== String(topicId));
+    saveAppState();
+    await syncSubjectToSheet(subject);
+    renderSubjectDetail();
 }
 
 async function uploadFile(subjectId, topicId, event) {
@@ -698,6 +756,36 @@ async function toggleTask(id) {
         renderNotificationPanel();
         updateNotifications();
     }
+}
+
+async function deleteCompletedTask(taskId) {
+    const task = tasks.find(t => String(t.id) === String(taskId));
+    if (!task) return;
+
+    const confirmed = window.confirm(`Delete the finished task "${task.name}" from your history?`);
+    if (!confirmed) return;
+
+    tasks = tasks.filter(t => String(t.id) !== String(taskId));
+    saveAppState();
+
+    if (APPS_SCRIPT_URL) {
+        try {
+            await fetch(APPS_SCRIPT_URL, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "deleteTask", id: taskId })
+            });
+        } catch (err) {
+            console.error("Error deleting task from Google Sheets:", err);
+        }
+    }
+
+    renderTasks();
+    renderProgress();
+    renderCalendar();
+    renderNotificationPanel();
+    updateNotifications();
 }
 
 function renderTasks() {
@@ -834,6 +922,45 @@ function renderCalendar() {
         : `<p class="empty-text"><i class="fa-regular fa-calendar"></i> No upcoming deadlines this month. Generate a plan to add a deadline.</p>`;
 }
 
+function getCompletedHistoryTasks() {
+    const completedTasks = tasks.filter(task => task.completed);
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfLast7Days = new Date(startOfToday);
+    startOfLast7Days.setDate(startOfToday.getDate() - 6);
+    const startOfLast30Days = new Date(startOfToday);
+    startOfLast30Days.setDate(startOfToday.getDate() - 29);
+
+    return completedTasks.filter(task => {
+        const completedAt = task.completedAt ? new Date(task.completedAt) : parseDeadline(task.deadline) || new Date();
+        if (Number.isNaN(completedAt.getTime())) return false;
+
+        switch (completedHistoryFilter) {
+            case "today":
+                return completedAt >= startOfToday;
+            case "7days":
+                return completedAt >= startOfLast7Days;
+            case "30days":
+                return completedAt >= startOfLast30Days;
+            case "month":
+                return completedAt >= startOfMonth;
+            case "all":
+            default:
+                return true;
+        }
+    }).sort((a, b) => {
+        const dateA = Date.parse(a.completedAt) || Date.parse(a.deadline) || 0;
+        const dateB = Date.parse(b.completedAt) || Date.parse(b.deadline) || 0;
+        return dateB - dateA;
+    });
+}
+
+function setCompletedHistoryFilter(value) {
+    completedHistoryFilter = value;
+    renderProgress();
+}
+
 function renderProgress() {
     const container = document.getElementById("progressSummary");
     if (!container) return;
@@ -862,13 +989,12 @@ function renderProgress() {
 
     const history = document.getElementById("completedTaskHistory");
     const historyCount = document.getElementById("historyCount");
+    const historyFilter = document.getElementById("historyFilter");
     if (!history || !historyCount) return;
-    const orderedHistory = completedTasks.slice().sort((a, b) => {
-        const dateA = Date.parse(a.completedAt) || 0;
-        const dateB = Date.parse(b.completedAt) || 0;
-        return dateB - dateA;
-    });
+
+    const orderedHistory = getCompletedHistoryTasks();
     historyCount.textContent = String(orderedHistory.length);
+    if (historyFilter) historyFilter.value = completedHistoryFilter;
     history.innerHTML = orderedHistory.length
         ? orderedHistory.map(task => `<article class="history-task-item" id="history-task-${task.id}">
             <span class="history-task-check"><i class="fa-solid fa-check"></i></span>
@@ -877,11 +1003,16 @@ function renderProgress() {
                 ${task.description ? `<p>${escapeHtml(task.description)}</p>` : ""}
                 <span>${task.completedAt ? `Completed ${new Date(task.completedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}` : "Completed task"} · ${Number(task.duration) || 0} min</span>
             </div>
-            <button class="history-restore-button" onclick="toggleTask(${task.id})" aria-label="Restore ${escapeHtml(task.name)} to dashboard">
-                <i class="fa-solid fa-arrow-rotate-left"></i><span>Restore</span>
-            </button>
+            <div class="history-actions">
+                <button class="history-restore-button" onclick="toggleTask(${task.id})" aria-label="Restore ${escapeHtml(task.name)} to dashboard">
+                    <i class="fa-solid fa-arrow-rotate-left"></i><span>Restore</span>
+                </button>
+                <button class="history-delete-button" onclick="deleteCompletedTask(${task.id})" aria-label="Delete ${escapeHtml(task.name)} from history">
+                    <i class="fa-solid fa-trash"></i><span>Delete</span>
+                </button>
+            </div>
         </article>`).join("")
-        : `<div class="history-empty-state"><i class="fa-regular fa-folder-open"></i><p>Completed tasks will be saved here. You can restore one to your dashboard any time.</p></div>`;
+        : `<div class="history-empty-state"><i class="fa-regular fa-folder-open"></i><p>No completed tasks match this filter. Try another time range or restore a task to your dashboard.</p></div>`;
 }
 
 function renderPomodoro() {

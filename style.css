@@ -536,6 +536,50 @@ input:hover, select:hover, textarea:hover {
     border-radius: 8px;
     border-left: 4px solid var(--accent-sage);
 }
+.topic-folder-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+.topic-folder-header h4 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.topic-folder-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.topic-action-button {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.topic-action-button:hover {
+    background: var(--accent-soft);
+    border-color: var(--accent-sage);
+    color: var(--accent-sage);
+}
+.topic-action-button.danger {
+    color: #d9534f;
+}
+.topic-action-button.danger:hover {
+    background: rgba(217, 83, 79, 0.08);
+    border-color: rgba(217, 83, 79, 0.5);
+    color: #d9534f;
+}
 .file-upload-label { display: inline-block; cursor: pointer; font-size: 12px; color: var(--accent-sage); margin: 8px 0; font-weight: 600; }
 .file-upload-label input { display: none; }
 .file-list { list-style: none; margin-top: 6px; }
@@ -1893,6 +1937,24 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     margin: 18px 0;
 }
 
+.history-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.history-toolbar label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.history-toolbar select {
+    max-width: 180px;
+}
+
 .history-heading {
     display: flex;
     align-items: center;
@@ -1976,11 +2038,33 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     font-size: 10px;
 }
 
-.history-restore-button {
+.history-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+}
+
+.history-restore-button,
+.history-delete-button {
     min-height: 34px;
     flex: none;
     padding: 7px 10px;
     font-size: 11px;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+.history-restore-button {
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-primary);
+}
+
+.history-delete-button {
+    border: 1px solid rgba(217, 83, 79, 0.3);
+    background: rgba(217, 83, 79, 0.08);
+    color: #d9534f;
 }
 
 .history-empty-state {
