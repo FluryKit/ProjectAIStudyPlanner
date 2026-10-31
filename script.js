@@ -1,5 +1,5 @@
 // Google Apps Script API Endpoint
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzth-z3eP-UaXf3NwKj9x2a-k7eGcopkf81wXIVCkiYiKQZmAwsUJ5wZUqkpPE2MuuiWw/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwjQiXa48JVlki6WE5Ox_uTeRpLg1nj9fub-hkbuXnpx_Cm1mbzJlSgdZrAPmWyNPDwdw/exec";
 
 // In-Memory App State (Zero LocalStorage)
 let subjects = [];
