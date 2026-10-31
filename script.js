@@ -26,9 +26,45 @@ function safeLocalStorageGet(key, fallback = []) {
     }
 }
 
+function normalizeDeadlineString(deadline) {
+    if (!deadline) return "";
+    if (deadline instanceof Date) {
+        const year = deadline.getFullYear();
+        const month = String(deadline.getMonth() + 1).padStart(2, "0");
+        const day = String(deadline.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+    }
+
+    const normalized = String(deadline).trim();
+    if (!normalized) return "";
+
+    // Match leading YYYY-MM-DD regardless of timestamp or timezone suffix after it
+    const isoDateMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoDateMatch) {
+        return `${isoDateMatch[1]}-${isoDateMatch[2]}-${isoDateMatch[3]}`;
+    }
+
+    return normalized;
+}
+
+function sanitizeTaskDeadline(task) {
+    if (!task || !Object.prototype.hasOwnProperty.call(task, 'deadline') || !task.deadline) {
+        return task;
+    }
+
+    const normalized = normalizeDeadlineString(task.deadline);
+    if (!normalized || !/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+        delete task.deadline;
+        return task;
+    }
+
+    task.deadline = normalized;
+    return task;
+}
+
 function saveAppState() {
     try {
-        localStorage.setItem('studyNestTasks', JSON.stringify(tasks));
+        localStorage.setItem('studyNestTasks', JSON.stringify(tasks.map(task => sanitizeTaskDeadline({ ...task }))));
         localStorage.setItem('studyNestSubjects', JSON.stringify(subjects));
     } catch (error) {
         console.warn('Failed to save local study data:', error);
@@ -38,8 +74,9 @@ function saveAppState() {
 function hydrateAppState() {
     const savedTasks = safeLocalStorageGet('studyNestTasks', []);
     const savedSubjects = safeLocalStorageGet('studyNestSubjects', []);
-    tasks = Array.isArray(savedTasks) ? savedTasks : [];
+    tasks = Array.isArray(savedTasks) ? savedTasks.map(task => sanitizeTaskDeadline({ ...task })) : [];
     subjects = Array.isArray(savedSubjects) ? savedSubjects : [];
+    saveAppState();
 }
 
 // --- GOOGLE SHEETS API SYNC HELPERS ---
@@ -184,8 +221,12 @@ function escapeHtml(value) {
 }
 
 function parseDeadline(deadline) {
-    if (!deadline || !/^\d{4}-\d{2}-\d{2}$/.test(deadline)) return null;
-    const [year, month, day] = deadline.split("-").map(Number);
+    if (!deadline) return null;
+
+    const normalized = normalizeDeadlineString(deadline);
+    if (!normalized || !/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return null;
+
+    const [year, month, day] = normalized.split("-").map(Number);
     const date = new Date(year, month - 1, day);
     if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
     return date;
