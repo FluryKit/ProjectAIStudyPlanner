@@ -767,19 +767,18 @@ input, select, textarea {
 
 .notification-badge {
     position: absolute;
-    top: -5px;
-    right: -5px;
-    display: grid;
-    min-width: 18px;
-    height: 18px;
-    place-items: center;
-    padding: 0 4px;
-    color: #fff;
+    top: -3px;
+    right: -2px;
+    display: block;
+    width: 10px;
+    height: 10px;
+    min-width: 10px;
+    padding: 0;
     background: #d9765c;
     border: 2px solid var(--bg-main);
-    border-radius: 20px;
-    font-size: 9px;
-    font-weight: 800;
+    border-radius: 50%;
+    font-size: 0;
+    line-height: 0;
 }
 
 .notification-panel, .search-results {
@@ -865,6 +864,11 @@ input, select, textarea {
     margin-top: 5px;
     background: #d99a55;
     border-radius: 50%;
+}
+
+.notification-dot.is-read {
+    opacity: 0.2;
+    background: var(--text-secondary);
 }
 
 .notification-empty {

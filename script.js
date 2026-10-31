@@ -9,6 +9,7 @@ let pomodoroSeconds = 25 * 60;
 let pomodoroInterval = null;
 let plannerMaterialMatches = [];
 let activePlannerMaterialIndex = -1;
+let notificationReadIds = new Set();
 
 // --- GOOGLE SHEETS API SYNC HELPERS ---
 
@@ -165,24 +166,21 @@ function getUpcomingTasks() {
         .sort((a, b) => a.date - b.date);
 }
 
-function updateNotifications() {
-    const badge = document.getElementById("notifBadge");
-    if (!badge) return;
-
-    const upcoming = getUpcomingTasks();
-    badge.textContent = upcoming.length > 9 ? "9+" : String(upcoming.length);
-    badge.classList.toggle("hidden", upcoming.length === 0);
+function getUnreadNotificationTasks() {
+    return getUpcomingTasks().filter(({ task }) => !notificationReadIds.has(String(task.id)));
 }
 
-function toggleNotifications() {
-    const panel = document.getElementById("notificationPanel");
-    const button = document.getElementById("notificationButton");
-    const isOpening = panel.classList.contains("hidden");
-    panel.classList.toggle("hidden", !isOpening);
-    button.setAttribute("aria-expanded", String(isOpening));
+function markAllNotificationsAsRead() {
+    getUpcomingTasks().forEach(({ task }) => notificationReadIds.add(String(task.id)));
+    updateNotifications();
+}
 
-    if (!isOpening) return;
+function renderNotificationPanel() {
+    const panel = document.getElementById("notificationPanel");
+    if (!panel) return;
+
     const upcoming = getUpcomingTasks();
+    const unread = getUnreadNotificationTasks();
     panel.innerHTML = `
         <div class="notification-panel-heading">
             <div><strong>Deadline reminders</strong><span>${upcoming.length} upcoming</span></div>
@@ -194,14 +192,37 @@ function toggleNotifications() {
                 today.setHours(0, 0, 0, 0);
                 const daysLeft = Math.round((date - today) / 86400000);
                 const label = daysLeft < 0 ? "Overdue" : daysLeft === 0 ? "Due today" : `Due in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
+                const unreadTask = !notificationReadIds.has(String(task.id));
                 return `<button class="notification-item" onclick="openDeadline('${task.deadline}')">
-                    <span class="notification-dot"></span>
+                    ${unreadTask ? '<span class="notification-dot"></span>' : '<span class="notification-dot is-read"></span>'}
                     <span><strong>${escapeHtml(task.name)}</strong><small>${label} · ${formatDeadline(task.deadline)}</small></span>
                 </button>`;
-            }).join("")}</div>`
+            }).join("")}</div>
+            ${unread.length ? `<button class="notification-footer" type="button" onclick="markAllNotificationsAsRead()">Mark all as read</button>` : ""}`
             : `<p class="notification-empty"><i class="fa-regular fa-circle-check"></i> You're all clear. No upcoming deadlines.</p>`}
-        <button class="notification-footer" onclick="navigateTo('calendar')">View calendar <i class="fa-solid fa-arrow-right"></i></button>
+        ${upcoming.length ? `<button class="notification-footer notification-view-calendar" type="button" onclick="navigateTo('calendar')">View calendar <i class="fa-solid fa-arrow-right"></i></button>` : ""}
     `;
+}
+
+function updateNotifications() {
+    const badge = document.getElementById("notifBadge");
+    if (!badge) return;
+
+    const unread = getUnreadNotificationTasks();
+    badge.textContent = "";
+    badge.classList.toggle("hidden", unread.length === 0);
+}
+
+function toggleNotifications() {
+    const panel = document.getElementById("notificationPanel");
+    const button = document.getElementById("notificationButton");
+    const isOpening = panel.classList.contains("hidden");
+    panel.classList.toggle("hidden", !isOpening);
+    button.setAttribute("aria-expanded", String(isOpening));
+
+    if (!isOpening) return;
+    markAllNotificationsAsRead();
+    renderNotificationPanel();
 }
 
 function handleGlobalSearch(event) {
@@ -231,6 +252,43 @@ function searchResultArguments(match) {
     return [match.type, match.id, match.parentId ?? null, match.topicId ?? null];
 }
 
+function getFuzzySearchScore(text, query) {
+    if (!text || !query) return 0;
+    const haystack = String(text).toLocaleLowerCase();
+    const normalizedQuery = String(query).trim().toLocaleLowerCase();
+    if (!normalizedQuery) return 0;
+    if (haystack.includes(normalizedQuery)) return 100 + haystack.length;
+
+    const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+    if (!tokens.length) return 0;
+
+    const matchedTokenCount = tokens.filter(token => haystack.includes(token)).length;
+    if (!matchedTokenCount) return 0;
+
+    return matchedTokenCount * 30 + (haystack.startsWith(tokens[0]) ? 15 : 0);
+}
+
+function getQuickNavigationMatches(query) {
+    const catalog = [
+        { type: "page", id: "dashboard", title: "Dashboard", subtitle: "Overview of tasks and study progress", icon: "fa-chart-pie", keywords: ["dashboard", "overview", "home dashboard", "main page", "stats"] },
+        { type: "page", id: "subjects", title: "Courses & Materials", subtitle: "Manage subjects, topics, and uploaded study files", icon: "fa-book-open", keywords: ["subjects", "courses", "materials", "topics", "book", "file", "notes"] },
+        { type: "page", id: "planner", title: "AI Study Planner", subtitle: "Generate a study plan from your deadline and daily time", icon: "fa-wand-magic-sparkles", keywords: ["ai study planner", "planner", "study plan", "form", "goal", "generate plan", "plan study"] },
+        { type: "page", id: "calendar", title: "Calendar", subtitle: "Review deadlines and study events", icon: "fa-calendar-days", keywords: ["calendar", "schedule", "deadline", "month", "due dates", "study calendar"] },
+        { type: "page", id: "progress", title: "Progress Tracking", subtitle: "See completed work and momentum", icon: "fa-chart-line", keywords: ["progress", "tracking", "history", "completed tasks", "study progress"] },
+        { type: "page", id: "pomodoro", title: "Pomodoro Focus", subtitle: "Start a focused work sprint", icon: "fa-stopwatch", keywords: ["pomodoro", "focus timer", "timer", "study timer", "deep work"] },
+        { type: "page", id: "home", title: "Home", subtitle: "Return to the landing screen", icon: "fa-house", keywords: ["home", "landing", "welcome"] }
+    ];
+
+    return catalog
+        .map(item => {
+            const haystack = [item.title, item.subtitle, ...(item.keywords || [])].join(" ");
+            const score = getFuzzySearchScore(haystack, query);
+            return score ? { ...item, score } : null;
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.score - a.score);
+}
+
 function handleSearchKeydown(event) {
     if (event.key === "Escape") {
         document.getElementById("searchResults").classList.add("hidden");
@@ -238,13 +296,30 @@ function handleSearchKeydown(event) {
     } else if (event.key === "Enter") {
         event.preventDefault();
         const query = event.target.value.trim();
-        if (query) showSearchResults(query);
+        if (!query) return;
+
+        const quickNav = getQuickNavigationMatches(query)[0];
+        if (quickNav && quickNav.type === "page" && query.split(/\s+/).length <= 4) {
+            navigateTo(quickNav.id);
+            return;
+        }
+        showSearchResults(query);
     }
 }
 
 function findSearchMatches(query) {
     const normalizedQuery = query.toLocaleLowerCase();
     const matches = [];
+
+    getQuickNavigationMatches(normalizedQuery).forEach(match => {
+        matches.push({
+            type: match.type,
+            id: match.id,
+            title: match.title,
+            subtitle: match.subtitle,
+            icon: match.icon
+        });
+    });
 
     subjects.forEach(subject => {
         if (String(subject.name || "").toLocaleLowerCase().includes(normalizedQuery)) {
@@ -266,10 +341,15 @@ function findSearchMatches(query) {
             matches.push({ type: "task", id: task.id, title: task.name, subtitle: task.deadline ? `Task · Due ${formatDeadline(task.deadline)}` : "Study task", icon: "fa-list-check" });
         }
     });
-    return matches;
+    return matches.slice(0, 8);
 }
 
 async function openSearchResult(type, id, parentId = null, topicId = null) {
+    if (type === "page") {
+        await navigateTo(id);
+        return;
+    }
+
     if (type === "task") {
         const taskRecord = tasks.find(task => String(task.id) === String(id));
         if (taskRecord && taskRecord.completed) {
@@ -987,6 +1067,59 @@ function closePlannerMaterialResults() {
     input.setAttribute("aria-expanded", "false");
 }
 
+function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+}
+
+function buildFuzzyStudyPlan(topic, description, deadline, hours, difficulty) {
+    const deadlineDate = parseDeadline(deadline);
+    if (!deadlineDate) return { days: [], summary: "Please choose a valid date." };
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const daysLeft = Math.max(1, Math.ceil((deadlineDate - today) / 86400000));
+    const difficultyWeight = { Easy: 0.35, Medium: 0.55, Hard: 0.8 }[difficulty] || 0.55;
+    const urgencyScore = daysLeft <= 3 ? 1 : daysLeft <= 7 ? 0.8 : daysLeft <= 14 ? 0.55 : 0.3;
+    const timeCapacity = hours >= 4 ? 1 : hours >= 3 ? 0.75 : hours >= 2 ? 0.55 : 0.3;
+    const intensity = clamp(urgencyScore * 0.65 + timeCapacity * 0.35 + difficultyWeight * 0.4, 0.2, 1);
+    const totalStudyDays = clamp(Math.max(3, Math.ceil(daysLeft / (1.7 - intensity * 0.5))), 3, 14);
+    const baseMinutes = Math.max(30, Math.round(hours * 60 * (0.75 + intensity * 0.25)));
+
+    const labels = {
+        low: "Steady build",
+        medium: "Balanced rhythm",
+        high: "Intense sprint"
+    };
+    const intensityLabel = intensity >= 0.8 ? labels.high : intensity >= 0.55 ? labels.medium : labels.low;
+    const focusLabel = daysLeft <= 3 ? "Urgent review" : daysLeft <= 7 ? "Priority sprint" : "Consistent progress";
+
+    const days = Array.from({ length: totalStudyDays }, (_, index) => {
+        const dayNumber = index + 1;
+        const isFinalDay = dayNumber === totalStudyDays;
+        const sessionMinutes = Math.round(baseMinutes * (isFinalDay ? 1.2 : 0.9 + (index / totalStudyDays) * 0.2));
+        const focusLine = isFinalDay
+            ? `Final review + active recall for ${topic}.${description ? ` ${description}` : ""}`
+            : `Build understanding of ${topic}${description ? ` (${description})` : ""} with short review blocks.`;
+
+        return {
+            dayNumber,
+            sessionMinutes,
+            focusLine,
+            label: dayNumber === 1 ? focusLabel : isFinalDay ? "Final check" : "Practice block"
+        };
+    });
+
+    return {
+        days,
+        intensity,
+        totalStudyDays,
+        intensityLabel,
+        energyLabel: urgencyScore >= 0.8 ? "High urgency" : urgencyScore >= 0.5 ? "Moderate urgency" : "Gentle pace",
+        summary: `${intensityLabel} plan · ${hours}h/day · ${daysLeft} day${daysLeft === 1 ? "" : "s"} to deadline.`
+    };
+}
+
 async function generatePlan() {
     const selection = document.getElementById("studyMaterial").value;
     const material = getPlannerMaterials().find(item => item.value === selection);
@@ -1001,34 +1134,24 @@ async function generatePlan() {
 
     const deadlineDate = parseDeadline(deadline);
     if (!deadlineDate) return alert("Please choose a valid target deadline.");
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const days = Math.max(1, Math.ceil((deadlineDate - today) / 86400000));
-    const studyDays = Math.min(days, 7);
 
     const resultDiv = document.getElementById("generatedPlan");
     resultDiv.innerHTML = "";
 
-    for (let i = 1; i <= studyDays; i++) {
+    const fuzzyPlan = buildFuzzyStudyPlan(topic, description, deadline, hours, difficulty);
+    fuzzyPlan.days.forEach(day => {
         const dayCard = document.createElement("div");
         dayCard.className = "plan-day-card";
-        
-        let note = i === studyDays 
-            ? `Final review & practice for ${escapeHtml(topic)}.${description ? ` ${escapeHtml(description)}` : ""}`
-            : `Focus on ${escapeHtml(topic)}${description ? `: ${escapeHtml(description)}` : " core concepts"} (Difficulty: ${escapeHtml(difficulty)}).`;
-
         dayCard.innerHTML = `
-            <h4>Day ${i}</h4>
-            <p><i class="fa-regular fa-clock"></i> ${hours} hour(s)/day</p>
-            <p>${note}</p>
+            <h4>Day ${day.dayNumber}</h4>
+            <p><i class="fa-regular fa-clock"></i> ${day.sessionMinutes} mins</p>
+            <p><strong>${escapeHtml(day.label)}</strong> · ${escapeHtml(day.focusLine)}</p>
         `;
         resultDiv.appendChild(dayCard);
-    }
+    });
 
     document.getElementById("planResult").classList.remove("hidden");
-    document.getElementById("generatedPlanDescription").textContent = description
-        ? `For ${topic}: ${description}`
-        : `A gentle, structured plan for ${topic}.`;
+    document.getElementById("generatedPlanDescription").textContent = `${fuzzyPlan.summary} ${description ? `Focus: ${description}` : `A structured plan for ${topic}.`}`;
 
     const newTask = {
         id: Date.now(),
