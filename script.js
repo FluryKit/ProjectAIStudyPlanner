@@ -11,24 +11,64 @@ let plannerMaterialMatches = [];
 let activePlannerMaterialIndex = -1;
 let notificationReadIds = new Set();
 
+// --- LOCAL STORAGE PERSISTENCE ---
+
+function safeLocalStorageGet(key, fallback = []) {
+    try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return fallback;
+        const parsed = JSON.parse(raw);
+        return parsed && Array.isArray(parsed) ? parsed : fallback;
+    } catch (error) {
+        console.warn(`Failed to read local storage for ${key}:`, error);
+        return fallback;
+    }
+}
+
+function saveAppState() {
+    try {
+        localStorage.setItem('studyNestTasks', JSON.stringify(tasks));
+        localStorage.setItem('studyNestSubjects', JSON.stringify(subjects));
+    } catch (error) {
+        console.warn('Failed to save local study data:', error);
+    }
+}
+
+function hydrateAppState() {
+    const savedTasks = safeLocalStorageGet('studyNestTasks', []);
+    const savedSubjects = safeLocalStorageGet('studyNestSubjects', []);
+    tasks = Array.isArray(savedTasks) ? savedTasks : [];
+    subjects = Array.isArray(savedSubjects) ? savedSubjects : [];
+}
+
 // --- GOOGLE SHEETS API SYNC HELPERS ---
 
 async function loadDataFromSheet() {
+    hydrateAppState();
+
     if (!APPS_SCRIPT_URL) return;
 
     try {
         const response = await fetch(`${APPS_SCRIPT_URL}?action=getData`);
         if (!response.ok) throw new Error("Failed to load data from Google Sheets.");
-        
+
         const data = await response.json();
-        tasks = data.tasks || [];
-        subjects = data.subjects || [];
+        const loadedTasks = Array.isArray(data.tasks) ? data.tasks : [];
+        const loadedSubjects = Array.isArray(data.subjects) ? data.subjects : [];
+
+        if (loadedTasks.length || loadedSubjects.length) {
+            tasks = loadedTasks;
+            subjects = loadedSubjects;
+            saveAppState();
+        }
     } catch (err) {
         console.error("Error fetching data from backend:", err);
     }
 }
 
 async function syncTaskToSheet(task) {
+    saveAppState();
+
     if (!APPS_SCRIPT_URL) return;
 
     try {
@@ -44,6 +84,8 @@ async function syncTaskToSheet(task) {
 }
 
 async function syncSubjectToSheet(subject) {
+    saveAppState();
+
     if (!APPS_SCRIPT_URL) return;
 
     try {
@@ -652,6 +694,8 @@ async function toggleTask(id) {
         await syncTaskToSheet(task);
         renderTasks();
         renderProgress();
+        renderCalendar();
+        renderNotificationPanel();
         updateNotifications();
     }
 }
@@ -1174,24 +1218,41 @@ async function generatePlan() {
 
 // --- THEME TOGGLE ---
 
-function toggleTheme() {
+function applyTheme(isLightMode) {
     const body = document.body;
-    const isLight = body.classList.toggle('light-mode');
+    body.classList.toggle('light-mode', isLightMode);
     document.querySelectorAll(".theme-switch input").forEach(checkbox => {
-        checkbox.checked = isLight;
+        checkbox.checked = isLightMode;
     });
+    try {
+        localStorage.setItem('studyNestTheme', isLightMode ? 'light' : 'dark');
+    } catch (e) {}
+}
+
+function toggleTheme() {
+    const isLight = !document.body.classList.contains('light-mode');
+    applyTheme(isLight);
+}
+
+function initializeTheme() {
+    try {
+        const savedTheme = localStorage.getItem('studyNestTheme');
+        const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+        applyTheme(savedTheme ? savedTheme === 'light' : prefersLight);
+    } catch (e) {
+        applyTheme(false);
+    }
 }
 
 // --- INITIAL BOOT ---
 
 document.addEventListener('DOMContentLoaded', async () => {
+    initializeTheme();
+    hydrateAppState();
     updateSidebarAccessibility();
     window.addEventListener("resize", updateSidebarAccessibility);
 
-    // Purge browser local storage
-    try { localStorage.clear(); } catch(e) {}
-
-    // Fetch live data directly from Google Sheet before rendering
+    // Fetch live data directly from Google Sheet before rendering, but keep local storage as the source of truth if the sheet is empty or unavailable
     await loadDataFromSheet();
     updateNotifications();
     document.addEventListener("click", event => {

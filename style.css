@@ -1,34 +1,39 @@
 :root {
     --bg-main: #141512;
-    --bg-header: rgba(20, 21, 18, 0.85);
+    --bg-header: rgba(20, 21, 18, 0.82);
     --bg-card: #1C1E18;
     --bg-subcard: #23261F;
     --border-color: #2D3028;
-    --text-primary: #EDE8DF;
-    --text-secondary: #A09B8F;
+    --text-primary: #F3EFE7;
+    --text-secondary: #A9A295;
     --accent-sage: #8BA88E;
     --accent-soft: rgba(139, 168, 142, 0.12);
+    --shadow-soft: 0 12px 34px rgba(0, 0, 0, 0.15);
 }
 
 body.light-mode {
-    --bg-main: #F4F1EA;
-    --bg-header: rgba(244, 241, 234, 0.85);
+    --bg-main: #F5F2EA;
+    --bg-header: rgba(250, 247, 241, 0.82);
     --bg-card: #FFFFFF;
-    --bg-subcard: #F8F6F0;
-    --border-color: #E2DDD3;
-    --text-primary: #2B2D2A;
-    --text-secondary: #656962;
+    --bg-subcard: #F7F4EE;
+    --border-color: #E5DED1;
+    --text-primary: #1F2722;
+    --text-secondary: #5C655F;
     --accent-sage: #4E6E52;
-    --accent-soft: #E5EFE6;
+    --accent-soft: #EAF2EB;
+    --shadow-soft: 0 10px 28px rgba(33, 48, 38, 0.08);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+html { color-scheme: dark; }
+body.light-mode { color-scheme: light; }
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: var(--bg-main);
+    background: radial-gradient(circle at top left, rgba(139, 168, 142, 0.08), transparent 30%), var(--bg-main);
     color: var(--text-primary);
     min-height: 100vh;
     line-height: 1.6;
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Header Overlay on Landing Screen */
@@ -41,6 +46,11 @@ body:has(.sketch-landing-container) .app-header {
     width: 100%;
     z-index: 1000;
     padding: 24px 8%;
+}
+
+.muted-text {
+    color: var(--text-secondary);
+    font-size: 12px;
 }
 
 body:has(.sketch-landing-container) .app-nav,
@@ -151,11 +161,17 @@ input:checked + .slider .slider-knob .icon-light {
 
 /* Dynamic Components */
 .card {
-    background: var(--bg-card);
+    background: linear-gradient(180deg, rgba(255,255,255,0.01), transparent), var(--bg-card);
     border: 1px solid var(--border-color);
-    border-radius: 12px;
+    border-radius: 16px;
     padding: 24px;
     margin-bottom: 24px;
+    box-shadow: var(--shadow-soft);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.card:hover {
+    border-color: rgba(139, 168, 142, 0.45);
+    box-shadow: 0 14px 38px rgba(0, 0, 0, 0.12);
 }
 .hero-card {
     background: var(--bg-card); border: 1px solid var(--border-color);
@@ -194,8 +210,11 @@ input:checked + .slider .slider-knob .icon-light {
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text-secondary); }
 input, select, textarea {
-    width: 100%; padding: 10px 12px; background: var(--bg-subcard); border: 1px solid var(--border-color);
-    border-radius: 8px; color: var(--text-primary); outline: none; font-size: 14px;
+    width: 100%; padding: 11px 12px; background: var(--bg-subcard); border: 1px solid var(--border-color);
+    border-radius: 10px; color: var(--text-primary); outline: none; font-size: 14px; transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+input:hover, select:hover, textarea:hover {
+    border-color: rgba(139, 168, 142, 0.5);
 }
 .primary-button {
     width: 100%; border: none; background: var(--accent-sage); color: #fff;
@@ -363,9 +382,89 @@ input, select, textarea {
 }
 
 /* Mobile Responsiveness */
+@media (max-width: 980px) {
+    .calendar-layout,
+    .dashboard-columns,
+    .progress-stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .search-container {
+        width: min(100%, 360px);
+    }
+}
+
 @media (max-width: 768px) {
     body:has(.sketch-landing-container) .app-header {
         padding: 16px 20px;
+    }
+
+    .app-layout {
+        display: block;
+    }
+
+    .app-sidebar {
+        position: fixed;
+        inset: 0 auto 0 0;
+        width: min(84vw, 320px);
+        transform: translateX(-103%);
+        box-shadow: 0 22px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .sidebar-open .app-sidebar {
+        transform: translateX(0);
+    }
+
+    .sidebar-backdrop {
+        position: fixed;
+        inset: 0;
+        display: block;
+        background: rgba(0, 0, 0, 0.38);
+        border: 0;
+        z-index: 110;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+    }
+
+    .sidebar-open .sidebar-backdrop {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .top-utility-bar {
+        padding: 10px 16px;
+        gap: 12px;
+    }
+
+    .topbar-leading {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .search-container {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .utility-actions {
+        gap: 8px;
+    }
+
+    .utility-divider {
+        display: none;
+    }
+
+    .notification-panel {
+        right: -12px;
+    }
+
+    .search-shortcut {
+        display: none;
+    }
+
+    .search-container {
+        min-height: 40px;
     }
 
     .sketch-landing-content {
@@ -532,7 +631,7 @@ input, select, textarea {
     min-height: 100vh;
     display: flex;
     background:
-        radial-gradient(ellipse at 80% 0%, rgba(139, 168, 142, 0.07), transparent 34rem),
+        radial-gradient(ellipse at 80% 0%, rgba(139, 168, 142, 0.08), transparent 34rem),
         var(--bg-main);
 }
 
@@ -545,8 +644,9 @@ input, select, textarea {
     width: var(--sidebar-width);
     height: 100vh;
     padding: 24px 16px 18px;
-    background: var(--bg-card);
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent), var(--bg-card);
     border-right: 1px solid var(--border-color);
+    box-shadow: inset -1px 0 0 rgba(255,255,255,0.02);
     transition: width 0.22s ease, flex-basis 0.22s ease, transform 0.22s ease;
     z-index: 120;
 }
@@ -632,12 +732,16 @@ input, select, textarea {
     gap: 12px;
     padding: 10px 12px;
     border: 1px solid transparent;
-    border-radius: 10px;
+    border-radius: 12px;
     color: var(--text-secondary);
     background: transparent;
     text-align: left;
     font-size: 13px;
     font-weight: 600;
+    transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+.sidebar-nav .nav-btn:hover {
+    transform: translateX(2px);
 }
 
 .sidebar-nav .nav-btn i {
@@ -685,9 +789,13 @@ input, select, textarea {
     justify-content: space-between;
     gap: 24px;
     padding: 12px clamp(20px, 4vw, 56px);
-    background: var(--bg-header);
+    background: rgba(26, 28, 24, 0.72);
     backdrop-filter: blur(14px);
     border-bottom: 1px solid var(--border-color);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+}
+body.light-mode .top-utility-bar {
+    background: rgba(250, 247, 241, 0.8);
 }
 
 .topbar-leading, .utility-actions {
@@ -702,7 +810,8 @@ input, select, textarea {
     padding: 0 12px;
     background: var(--bg-subcard);
     border: 1px solid var(--border-color);
-    border-radius: 11px;
+    border-radius: 12px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
 }
 
 .search-container:focus-within {
@@ -986,6 +1095,18 @@ input, select, textarea {
 
 .mobile-menu-button, .sidebar-backdrop {
     display: none;
+}
+
+@media (max-width: 760px) {
+    .mobile-menu-button {
+        display: inline-flex;
+        flex: none;
+        width: 38px;
+        height: 38px;
+        background: var(--bg-subcard);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+    }
 }
 
 .search-results {
@@ -1654,14 +1775,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     min-width: 0;
     margin: 0;
     padding: 14px;
-    border: 1px solid transparent;
-    transition: border-color 0.18s ease, background 0.18s ease;
+    border: 1px solid var(--border-color);
+    background: rgba(255,255,255,0.01);
+    border-radius: 12px;
+    transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
 }
-
 .task-list .task-item:hover {
-    border-color: var(--border-color);
+    border-color: rgba(139, 168, 142, 0.42);
+    background: var(--bg-subcard);
+    transform: translateY(-1px);
 }
-
 .task-list .task-details {
     flex: 1;
     gap: 3px;
