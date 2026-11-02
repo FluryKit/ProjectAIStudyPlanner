@@ -1,5 +1,6 @@
 // Google Apps Script API Endpoint
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwjQiXa48JVlki6WE5Ox_uTeRpLg1nj9fub-hkbuXnpx_Cm1mbzJlSgdZrAPmWyNPDwdw/exec";
+const FILE_STORAGE_DB = "studyNestFiles";
 
 // In-Memory App State (Zero LocalStorage)
 let subjects = [];
@@ -24,6 +25,105 @@ function safeLocalStorageGet(key, fallback = []) {
         console.warn(`Failed to read local storage for ${key}:`, error);
         return fallback;
     }
+}
+
+function openFileStorage() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(FILE_STORAGE_DB, 1);
+        request.onupgradeneeded = () => request.result.createObjectStore("files", { keyPath: "id" });
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error("Unable to open file storage."));
+    });
+}
+
+function subjectFileStorageKey(subjectId, topicId, fileId) {
+    return JSON.stringify([String(subjectId), String(topicId), String(fileId)]);
+}
+
+function getSubjectFiles() {
+    return subjects.flatMap(subject => (subject.topics || []).flatMap(topic =>
+        (topic.files || []).map(file => {
+            const { fileData, ...metadata } = file;
+            return {
+                ...metadata,
+                id: subjectFileStorageKey(subject.id, topic.id, file.id),
+                subjectId: subject.id,
+                topicId: topic.id,
+                file: metadata,
+                ...(fileData ? { fileData } : {})
+            };
+        })
+    ));
+}
+
+async function persistSubjectFiles() {
+    const db = await openFileStorage();
+    try {
+        await new Promise((resolve, reject) => {
+            const transaction = db.transaction("files", "readwrite");
+            const store = transaction.objectStore("files");
+            const request = store.getAll();
+
+            request.onsuccess = () => {
+                const existing = new Map(request.result.map(file => [file.id, file]));
+                const files = getSubjectFiles();
+                const currentIds = new Set(files.map(file => file.id));
+
+                files.forEach(file => {
+                    if (file.fileData && existing.get(file.id)?.fileData !== file.fileData) {
+                        store.put(file);
+                    }
+                });
+                existing.forEach((file, id) => {
+                    if (!currentIds.has(id)) store.delete(id);
+                });
+            };
+            request.onerror = () => reject(request.error || new Error("Unable to read stored files."));
+            transaction.oncomplete = resolve;
+            transaction.onerror = () => reject(transaction.error || new Error("Unable to save uploaded files."));
+            transaction.onabort = () => reject(transaction.error || new Error("Saving uploaded files was aborted."));
+        });
+    } finally {
+        db.close();
+    }
+}
+
+async function restoreSubjectFiles(subjectList) {
+    const db = await openFileStorage();
+    try {
+        const files = await new Promise((resolve, reject) => {
+            const transaction = db.transaction("files", "readonly");
+            const request = transaction.objectStore("files").getAll();
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error || new Error("Unable to load stored files."));
+        });
+
+        files.forEach(storedFile => {
+            const subject = subjectList.find(item => String(item.id) === String(storedFile.subjectId));
+            const topic = subject && (subject.topics || []).find(item => String(item.id) === String(storedFile.topicId));
+            if (!topic) return;
+
+            if (!topic.files) topic.files = [];
+            let file = topic.files.find(item => String(item.id) === String(storedFile.file.id));
+            if (!file) {
+                file = { ...storedFile.file };
+                topic.files.push(file);
+            }
+            file.fileData = storedFile.fileData;
+        });
+    } finally {
+        db.close();
+    }
+}
+
+function subjectsWithoutFileData() {
+    return subjects.map(subject => ({
+        ...subject,
+        topics: (subject.topics || []).map(topic => ({
+            ...topic,
+            files: (topic.files || []).map(({ fileData, ...file }) => file)
+        }))
+    }));
 }
 
 function normalizeDeadlineString(deadline) {
@@ -62,27 +162,29 @@ function sanitizeTaskDeadline(task) {
     return task;
 }
 
-function saveAppState() {
+async function saveAppState() {
+    await persistSubjectFiles();
     try {
         localStorage.setItem('studyNestTasks', JSON.stringify(tasks.map(task => sanitizeTaskDeadline({ ...task }))));
-        localStorage.setItem('studyNestSubjects', JSON.stringify(subjects));
+        localStorage.setItem('studyNestSubjects', JSON.stringify(subjectsWithoutFileData()));
     } catch (error) {
         console.warn('Failed to save local study data:', error);
     }
 }
 
-function hydrateAppState() {
+async function hydrateAppState() {
     const savedTasks = safeLocalStorageGet('studyNestTasks', []);
     const savedSubjects = safeLocalStorageGet('studyNestSubjects', []);
     tasks = Array.isArray(savedTasks) ? savedTasks.map(task => sanitizeTaskDeadline({ ...task })) : [];
     subjects = Array.isArray(savedSubjects) ? savedSubjects : [];
-    saveAppState();
+    await restoreSubjectFiles(subjects);
+    await saveAppState();
 }
 
 // --- GOOGLE SHEETS API SYNC HELPERS ---
 
 async function loadDataFromSheet() {
-    hydrateAppState();
+    await hydrateAppState();
 
     if (!APPS_SCRIPT_URL) return;
 
@@ -96,8 +198,39 @@ async function loadDataFromSheet() {
 
         if (loadedTasks.length || loadedSubjects.length) {
             tasks = loadedTasks;
-            subjects = loadedSubjects;
-            saveAppState();
+            const localSubjects = subjects;
+            subjects = loadedSubjects.map(loadedSubject => {
+                const localSubject = localSubjects.find(item => String(item.id) === String(loadedSubject.id));
+                if (!localSubject) return loadedSubject;
+
+                const topics = [...(loadedSubject.topics || [])];
+                (localSubject.topics || []).forEach(localTopic => {
+                    const loadedTopic = topics.find(item => String(item.id) === String(localTopic.id));
+                    if (!loadedTopic) {
+                        if ((localTopic.files || []).length) topics.push(localTopic);
+                        return;
+                    }
+
+                    const files = [...(loadedTopic.files || [])];
+                    (localTopic.files || []).forEach(localFile => {
+                        if (!files.some(file => String(file.id) === String(localFile.id))) files.push(localFile);
+                    });
+                    loadedTopic.files = files;
+                });
+
+                return {
+                    ...loadedSubject,
+                    topics
+                };
+            });
+            localSubjects.forEach(localSubject => {
+                const hasFiles = (localSubject.topics || []).some(topic => (topic.files || []).length);
+                if (hasFiles && !subjects.some(subject => String(subject.id) === String(localSubject.id))) {
+                    subjects.push(localSubject);
+                }
+            });
+            await restoreSubjectFiles(subjects);
+            await saveAppState();
         }
     } catch (err) {
         console.error("Error fetching data from backend:", err);
@@ -105,7 +238,7 @@ async function loadDataFromSheet() {
 }
 
 async function syncTaskToSheet(task) {
-    saveAppState();
+    await saveAppState();
 
     if (!APPS_SCRIPT_URL) return;
 
@@ -122,7 +255,13 @@ async function syncTaskToSheet(task) {
 }
 
 async function syncSubjectToSheet(subject) {
-    saveAppState();
+    try {
+        await saveAppState();
+    } catch (error) {
+        console.error("Error saving subject files on this device:", error);
+        alert("Unable to save your uploaded files on this device. Please try again.");
+        return;
+    }
 
     if (!APPS_SCRIPT_URL) return;
 
@@ -540,7 +679,7 @@ async function deleteSubject(id, event) {
     if (!confirmed) return;
 
     subjects = subjects.filter(s => String(s.id) !== String(id));
-    saveAppState();
+    await saveAppState();
 
     // Deletion sync request
     if (APPS_SCRIPT_URL) {
@@ -716,9 +855,8 @@ async function renameTopic(subjectId, topicId, event) {
         alert("Topic name cannot be empty.");
         return;
     }
-
     topic.name = cleanedName;
-    saveAppState();
+    topic.name = cleanedName;
     await syncSubjectToSheet(subject);
     renderSubjectDetail();
 }
@@ -733,9 +871,8 @@ async function deleteTopic(subjectId, topicId, event) {
 
     const confirmed = window.confirm(`Delete the topic "${topic.name}" and all uploaded files inside it?`);
     if (!confirmed) return;
-
     subject.topics = (subject.topics || []).filter(t => String(t.id) !== String(topicId));
-    saveAppState();
+    subject.topics = (subject.topics || []).filter(t => String(t.id) !== String(topicId));
     await syncSubjectToSheet(subject);
     renderSubjectDetail();
 }
@@ -807,7 +944,7 @@ async function deleteCompletedTask(taskId) {
     if (!confirmed) return;
 
     tasks = tasks.filter(t => String(t.id) !== String(taskId));
-    saveAppState();
+    await saveAppState();
 
     if (APPS_SCRIPT_URL) {
         try {
@@ -1420,7 +1557,6 @@ function initializeTheme() {
 
 document.addEventListener('DOMContentLoaded', async () => {
     initializeTheme();
-    hydrateAppState();
     updateSidebarAccessibility();
     window.addEventListener("resize", updateSidebarAccessibility);
 
