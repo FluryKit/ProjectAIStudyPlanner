@@ -1,19 +1,47 @@
 // Google Apps Script API Endpoint
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwjQiXa48JVlki6WE5Ox_uTeRpLg1nj9fub-hkbuXnpx_Cm1mbzJlSgdZrAPmWyNPDwdw/exec";
 const FILE_STORAGE_DB = "studyNestFiles";
+const DEFAULT_POMODORO_MINUTES = 25;
+const MIN_POMODORO_MINUTES = 1;
+const MAX_POMODORO_MINUTES = 1440;
 
 // In-Memory App State (Zero LocalStorage)
 let subjects = [];
 let tasks = [];
 let currentSubjectId = null;
-let pomodoroSeconds = 25 * 60;
+let pomodoroDurationMinutes = loadPomodoroDuration();
+let pomodoroSeconds = pomodoroDurationMinutes * 60;
 let pomodoroInterval = null;
+let pomodoroPipWindow = null;
+let pomodoroMiniDockOpen = false;
 let plannerMaterialMatches = [];
 let activePlannerMaterialIndex = -1;
 let notificationReadIds = new Set();
 let completedHistoryFilter = "all";
 
 // --- LOCAL STORAGE PERSISTENCE ---
+
+function loadPomodoroDuration() {
+    try {
+        const savedDuration = Number(localStorage.getItem("pomodoroDurationMinutes"));
+        return Number.isInteger(savedDuration) &&
+            savedDuration >= MIN_POMODORO_MINUTES &&
+            savedDuration <= MAX_POMODORO_MINUTES
+            ? savedDuration
+            : DEFAULT_POMODORO_MINUTES;
+    } catch (error) {
+        console.warn("Failed to read the Pomodoro duration from local storage:", error);
+        return DEFAULT_POMODORO_MINUTES;
+    }
+}
+
+function savePomodoroDuration() {
+    try {
+        localStorage.setItem("pomodoroDurationMinutes", String(pomodoroDurationMinutes));
+    } catch (error) {
+        console.warn("Failed to save the Pomodoro duration to local storage:", error);
+    }
+}
 
 function safeLocalStorageGet(key, fallback = []) {
     try {
@@ -292,10 +320,6 @@ async function navigateTo(pageName) {
             btn.classList.toggle("active", btn.dataset.page === pageName);
         });
 
-        if (pomodoroInterval) {
-            clearInterval(pomodoroInterval);
-            pomodoroInterval = null;
-        }
         if (pageName === "dashboard") renderTasks();
         if (pageName === "subjects") {
             currentSubjectId = null;
@@ -1195,8 +1219,58 @@ function renderProgress() {
 
 function renderPomodoro() {
     updatePomodoroDisplay();
+    updatePomodoroDurationInputs();
+    const status = document.getElementById("pomodoroStatus");
+    if (status) {
+        status.textContent = pomodoroSeconds <= 0
+            ? "Focus session complete. Take a short break!"
+            : pomodoroInterval
+                ? "Your focus session is in progress."
+                : "One small focus sprint at a time.";
+    }
+    updatePomodoroControls();
+    renderPomodoroMiniDock();
+}
+
+function updatePomodoroDurationInputs() {
+    const hoursInput = document.getElementById("pomodoroHours");
+    const minutesInput = document.getElementById("pomodoroMinutes");
+    if (hoursInput) {
+        hoursInput.value = String(Math.floor(pomodoroDurationMinutes / 60));
+        hoursInput.disabled = Boolean(pomodoroInterval);
+    }
+    if (minutesInput) {
+        minutesInput.value = String(pomodoroDurationMinutes % 60);
+        minutesInput.disabled = Boolean(pomodoroInterval);
+    }
+}
+
+function setPomodoroDuration() {
+    const hoursInput = document.getElementById("pomodoroHours");
+    const minutesInput = document.getElementById("pomodoroMinutes");
+    const status = document.getElementById("pomodoroStatus");
+    const hours = hoursInput?.value === "" ? 0 : Number(hoursInput?.value);
+    const minutes = minutesInput?.value === "" ? 0 : Number(minutesInput?.value);
+    if (pomodoroInterval) {
+        updatePomodoroDurationInputs();
+        return;
+    }
+    const duration = hours * 60 + minutes;
+    if (!Number.isInteger(hours) || hours < 0 || hours > 24 ||
+        !Number.isInteger(minutes) || minutes < 0 || minutes > 59 ||
+        duration < MIN_POMODORO_MINUTES || duration > MAX_POMODORO_MINUTES) {
+        updatePomodoroDurationInputs();
+        if (status) status.textContent = "One small focus sprint at a time.";
+        return;
+    }
+
+    pomodoroDurationMinutes = duration;
+    pomodoroSeconds = duration * 60;
+    savePomodoroDuration();
+    if (status) status.textContent = "One small focus sprint at a time.";
     const startButton = document.getElementById("pomodoroStartButton");
     if (startButton) startButton.innerHTML = `<i class="fa-solid fa-play"></i> Start focus`;
+    updatePomodoroDisplay();
 }
 
 function updatePomodoroDisplay() {
@@ -1206,23 +1280,65 @@ function updatePomodoroDisplay() {
         const seconds = pomodoroSeconds % 60;
         clock.textContent = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
     }
+    const pipClock = pomodoroPipWindow?.document.getElementById("pomodoroPipClock");
+    if (pipClock) {
+        const minutes = Math.floor(pomodoroSeconds / 60);
+        const seconds = pomodoroSeconds % 60;
+        pipClock.textContent = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    }
+    const miniClock = document.getElementById("pomodoroMiniClock");
+    if (miniClock) {
+        const minutes = Math.floor(pomodoroSeconds / 60);
+        const seconds = pomodoroSeconds % 60;
+        miniClock.textContent = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    }
+    updatePomodoroControls();
+}
+
+function updatePomodoroControls() {
+    const startButton = document.getElementById("pomodoroStartButton");
+    const pipStartButton = pomodoroPipWindow?.document.getElementById("pomodoroPipStartButton");
+    const miniStartButton = document.getElementById("pomodoroMiniToggle");
+    const buttonMarkup = pomodoroInterval
+        ? `<i class="fa-solid fa-pause"></i> Pause`
+        : pomodoroSeconds <= 0
+            ? `<i class="fa-solid fa-rotate-right"></i> Start another`
+            : `<i class="fa-solid fa-play"></i> ${pomodoroSeconds < pomodoroDurationMinutes * 60 ? "Resume focus" : "Start focus"}`;
+    if (startButton) startButton.innerHTML = buttonMarkup;
+    if (pipStartButton) {
+        pipStartButton.textContent = pomodoroInterval
+            ? "Pause"
+            : pomodoroSeconds <= 0
+                ? "Start another"
+                : pomodoroSeconds < pomodoroDurationMinutes * 60
+                    ? "Resume"
+                    : "Start";
+    }
+    if (miniStartButton) {
+        miniStartButton.textContent = pomodoroInterval
+            ? "Pause"
+            : pomodoroSeconds <= 0
+                ? "Start another"
+                : pomodoroSeconds < pomodoroDurationMinutes * 60
+                    ? "Resume"
+                    : "Start";
+    }
+    updatePomodoroDurationInputs();
 }
 
 function togglePomodoro() {
-    const startButton = document.getElementById("pomodoroStartButton");
     if (pomodoroInterval) {
         clearInterval(pomodoroInterval);
         pomodoroInterval = null;
-        if (startButton) startButton.innerHTML = `<i class="fa-solid fa-play"></i> Resume focus`;
+        updatePomodoroControls();
         return;
     }
 
     if (pomodoroSeconds <= 0) {
-        pomodoroSeconds = 25 * 60;
+        pomodoroSeconds = pomodoroDurationMinutes * 60;
         const status = document.getElementById("pomodoroStatus");
         if (status) status.textContent = "One small focus sprint at a time.";
     }
-    if (startButton) startButton.innerHTML = `<i class="fa-solid fa-pause"></i> Pause`;
     pomodoroInterval = setInterval(() => {
         pomodoroSeconds -= 1;
         updatePomodoroDisplay();
@@ -1231,22 +1347,82 @@ function togglePomodoro() {
             pomodoroInterval = null;
             const status = document.getElementById("pomodoroStatus");
             if (status) status.textContent = "Focus session complete. Take a short break!";
-            if (startButton) startButton.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Start another`;
+            updatePomodoroControls();
             if ("Notification" in window && Notification.permission === "granted") {
                 new Notification("StudyNest focus session complete", { body: "Great work! Take a short break before your next session." });
             }
         }
     }, 1000);
+    updatePomodoroControls();
+}
+
+async function openPomodoroMiniTimer() {
+    if (pomodoroMiniDockOpen) return;
+    if (pomodoroPipWindow) {
+        pomodoroPipWindow.focus();
+        return;
+    }
+
+    try {
+        if (typeof documentPictureInPicture === "undefined") {
+            pomodoroMiniDockOpen = true;
+            renderPomodoroMiniDock();
+            return;
+        }
+        pomodoroPipWindow = await documentPictureInPicture.requestWindow({ width: 260, height: 150 });
+        pomodoroPipWindow.document.title = "StudyNest Focus Timer";
+        pomodoroPipWindow.document.head.innerHTML = `<meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                * { box-sizing: border-box; }
+                body { margin: 0; padding: 18px; color: #253126; background: #f5f6ef; font-family: system-ui, sans-serif; text-align: center; }
+                main { display: flex; height: 100%; flex-direction: column; justify-content: center; gap: 12px; }
+                p { margin: 0; color: #657160; font-size: 12px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+                output { font-size: 48px; font-weight: 750; line-height: 1; font-variant-numeric: tabular-nums; }
+                button { align-self: center; min-width: 100px; padding: 8px 18px; border: 0; border-radius: 20px; color: white; background: #71876a; font: inherit; font-weight: 650; cursor: pointer; }
+            </style>`;
+        pomodoroPipWindow.document.body.innerHTML = `<main>
+            <p>StudyNest focus</p>
+            <output id="pomodoroPipClock" role="timer" aria-live="off"></output>
+            <button id="pomodoroPipStartButton" type="button"></button>
+        </main>`;
+        pomodoroPipWindow.document.getElementById("pomodoroPipStartButton")
+            .addEventListener("click", togglePomodoro);
+        pomodoroPipWindow.addEventListener("pagehide", () => {
+            pomodoroPipWindow = null;
+            renderPomodoro();
+        }, { once: true });
+        updatePomodoroDisplay();
+        renderPomodoro();
+    } catch (error) {
+        pomodoroPipWindow = null;
+        console.warn("The always-on-top mini timer is unavailable; showing the in-app mini timer instead:", error);
+        pomodoroMiniDockOpen = true;
+        renderPomodoroMiniDock();
+    }
+}
+
+function renderPomodoroMiniDock() {
+    const miniDock = document.getElementById("pomodoroMiniDock");
+    if (miniDock) miniDock.classList.toggle("hidden", !pomodoroMiniDockOpen);
+    const miniTimerButton = document.getElementById("pomodoroMiniTimerButton");
+    if (miniTimerButton) {
+        const miniTimerOpen = Boolean(pomodoroPipWindow || pomodoroMiniDockOpen);
+        miniTimerButton.textContent = miniTimerOpen ? "Mini timer is open" : "Open mini timer";
+        miniTimerButton.disabled = miniTimerOpen;
+    }
+}
+
+function closePomodoroMiniTimer() {
+    pomodoroMiniDockOpen = false;
+    renderPomodoroMiniDock();
 }
 
 function resetPomodoro() {
     if (pomodoroInterval) clearInterval(pomodoroInterval);
     pomodoroInterval = null;
-    pomodoroSeconds = 25 * 60;
+    pomodoroSeconds = pomodoroDurationMinutes * 60;
     const status = document.getElementById("pomodoroStatus");
     if (status) status.textContent = "One small focus sprint at a time.";
-    const startButton = document.getElementById("pomodoroStartButton");
-    if (startButton) startButton.innerHTML = `<i class="fa-solid fa-play"></i> Start focus`;
     updatePomodoroDisplay();
 }
 

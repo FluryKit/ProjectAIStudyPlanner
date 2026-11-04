@@ -1687,6 +1687,44 @@ body.light-mode .top-utility-bar {
     color: var(--accent-sage);
 }
 
+.pomodoro-duration-control {
+    display: grid;
+    justify-items: center;
+    gap: 7px;
+    margin-top: 24px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.pomodoro-duration-control label {
+    font-weight: 650;
+}
+
+.pomodoro-duration-input {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.pomodoro-duration-input input {
+    width: 72px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    color: var(--text-primary);
+    background: var(--bg-subcard);
+    text-align: center;
+}
+
+.pomodoro-duration-input span {
+    white-space: nowrap;
+}
+
+.pomodoro-duration-input input:focus {
+    outline: 2px solid var(--accent-sage);
+    outline-offset: 2px;
+}
+
 .timer-clock {
     margin: 20px 0 8px;
     color: var(--text-primary);
@@ -1716,6 +1754,10 @@ body.light-mode .top-utility-bar {
     border-radius: 20px;
 }
 
+.timer-mini-button {
+    border-radius: 20px;
+}
+
 .pomodoro-hint {
     padding-top: 16px;
     color: var(--text-secondary);
@@ -1726,6 +1768,74 @@ body.light-mode .top-utility-bar {
 .pomodoro-hint i {
     margin-right: 5px;
     color: var(--accent-sage);
+}
+
+.pomodoro-mini-dock {
+    position: fixed;
+    z-index: 1200;
+    right: 20px;
+    bottom: 20px;
+    display: grid;
+    width: min(250px, calc(100vw - 32px));
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    color: var(--text-primary);
+    background: var(--bg-card);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.24);
+    text-align: center;
+}
+
+.pomodoro-mini-dock[hidden],
+.pomodoro-mini-dock.hidden {
+    display: none;
+}
+
+.pomodoro-mini-dock-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.pomodoro-mini-dock-heading i {
+    margin-right: 5px;
+    color: var(--accent-sage);
+}
+
+.pomodoro-mini-close {
+    padding: 0 4px;
+    border: 0;
+    color: var(--text-secondary);
+    background: transparent;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.pomodoro-mini-clock {
+    color: var(--text-primary);
+    font-size: 38px;
+    font-weight: 750;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.pomodoro-mini-toggle {
+    justify-self: center;
+    min-width: 100px;
+    padding: 8px 18px;
+    border: 0;
+    border-radius: 20px;
+    color: white;
+    background: var(--accent-sage);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
 }
 
 /* Consistent controls, active tasks, and study history */

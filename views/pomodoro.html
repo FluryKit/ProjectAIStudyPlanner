@@ -6,11 +6,23 @@
     </div>
     <section class="card pomodoro-card">
         <span class="pomodoro-overline"><i class="fa-solid fa-leaf"></i> FOCUS SESSION</span>
+        <div class="pomodoro-duration-control">
+            <span>Session length</span>
+            <div class="pomodoro-duration-input" role="group" aria-label="Session length">
+                <input id="pomodoroHours" type="number" min="0" max="24" step="1" value="0"
+                    aria-label="Hours" onchange="setPomodoroDuration()">
+                <span>hour</span>
+                <input id="pomodoroMinutes" type="number" min="0" max="59" step="1" value="25"
+                    aria-label="Minutes" onchange="setPomodoroDuration()">
+                <span>min</span>
+            </div>
+        </div>
         <div class="timer-clock" id="timerClock" role="timer" aria-live="off">25:00</div>
         <p class="pomodoro-caption" id="pomodoroStatus">One small focus sprint at a time.</p>
         <div class="timer-controls">
             <button class="primary-button timer-start-button" id="pomodoroStartButton" onclick="togglePomodoro()"><i class="fa-solid fa-play"></i> Start focus</button>
             <button class="secondary-button timer-reset-button" onclick="resetPomodoro()"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+            <button class="secondary-button timer-mini-button" id="pomodoroMiniTimerButton" onclick="openPomodoroMiniTimer()">Open mini timer</button>
         </div>
         <p class="pomodoro-hint"><i class="fa-regular fa-lightbulb"></i> Try putting away distractions until the timer ends.</p>
     </section>

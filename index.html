@@ -109,6 +109,14 @@
             <main id="app-container" class="main-content"></main>
         </div>
     </div>
+    <aside class="pomodoro-mini-dock hidden" id="pomodoroMiniDock" aria-label="Pomodoro mini timer" aria-live="polite">
+        <div class="pomodoro-mini-dock-heading">
+            <span><i class="fa-solid fa-stopwatch"></i> Focus timer</span>
+            <button type="button" class="pomodoro-mini-close" onclick="closePomodoroMiniTimer()" aria-label="Close mini timer">&times;</button>
+        </div>
+        <output class="pomodoro-mini-clock" id="pomodoroMiniClock" role="timer" aria-live="off">25:00</output>
+        <button type="button" class="pomodoro-mini-toggle" id="pomodoroMiniToggle" onclick="togglePomodoro()">Start</button>
+    </aside>
     <script src="script.js"></script>
 </body>
 </html>
