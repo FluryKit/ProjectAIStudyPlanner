@@ -1826,6 +1826,33 @@ body.light-mode .top-utility-bar {
     font-size: 13px;
 }
 
+.pomodoro-buddy-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    width: min(100%, 420px);
+    margin: 18px auto 0;
+    padding: 13px 15px;
+    color: var(--text-secondary);
+    background: var(--accent-soft);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    font-size: 13px;
+    line-height: 1.55;
+    text-align: left;
+}
+
+.pomodoro-buddy-note i {
+    flex: none;
+    margin-top: 3px;
+    color: var(--accent-sage);
+    font-size: 15px;
+}
+
+.pomodoro-buddy-note p {
+    margin: 0;
+}
+
 .timer-controls {
     margin: 28px 0 18px;
 }

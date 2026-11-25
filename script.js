@@ -4,13 +4,21 @@ const FILE_STORAGE_DB = "studyNestFiles";
 const DEFAULT_POMODORO_MINUTES = 25;
 const MIN_POMODORO_MINUTES = 1;
 const MAX_POMODORO_MINUTES = 1440;
+const POMODORO_BUDDY_CHECK_INS = [
+    "Hydration side quest: sip some water if it's nearby.",
+    "Shoulders check: they don't need to live next to your ears.",
+    "If your brain wandered off, invite it back like a tiny duck. No scolding.",
+    "Tiny progress is still progress. Your brain is collecting XP.",
+    "A future-you high-five is being prepared. Keep going at your own pace."
+];
 
 // In-Memory App State (Zero LocalStorage)
 let subjects = [];
 let tasks = [];
 let currentSubjectId = null;
 let pomodoroDurationMinutes = loadPomodoroDuration();
-let pomodoroSeconds = pomodoroDurationMinutes * 60;
+let pomodoroSessionDurationMinutes = pomodoroDurationMinutes;
+let pomodoroSeconds = pomodoroSessionDurationMinutes * 60;
 let pomodoroInterval = null;
 let pomodoroElapsedSeconds = 0;
 let selectedPomodoroTaskId = null;
@@ -1420,8 +1428,52 @@ function renderPomodoro() {
                     ? `Linked to ${selectedTask.name} · ${Number(selectedTask.duration) || 0} mins remaining.`
                     : "General focus is unlinked; select a task to track its study debt.";
     }
+    updatePomodoroBuddyMessage();
     updatePomodoroControls();
     renderPomodoroMiniDock();
+}
+
+function setPomodoroBuddyMessage(message) {
+    const buddyMessage = document.getElementById("pomodoroBuddyMessage");
+    if (buddyMessage && buddyMessage.textContent !== message) buddyMessage.textContent = message;
+}
+
+function updatePomodoroBuddyMessage() {
+    const durationSeconds = pomodoroSessionDurationMinutes * 60;
+    const elapsedSeconds = Math.max(0, durationSeconds - pomodoroSeconds);
+    const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+    let message;
+
+    if (pomodoroSeconds <= 0) {
+        message = "Sprint complete! Let your brain do a tiny victory wiggle, then take a breather.";
+    } else if (pomodoroInterval) {
+        if (elapsedMinutes >= 50 && elapsedMinutes % 25 < 5) {
+            message = "Long-focus check-in: stretch or grab a drink if you need one. Your brain deserves a little care.";
+        } else if (elapsedMinutes < 5) {
+            message = "Off you go! One small step at a time; the rest can wait.";
+        } else {
+            const checkInIndex = Math.floor(elapsedMinutes / 5) - 1;
+            message = POMODORO_BUDDY_CHECK_INS[checkInIndex % POMODORO_BUDDY_CHECK_INS.length];
+        }
+    } else if (elapsedSeconds > 0) {
+        message = "Pause approved. Your brain is allowed to take breaks—no guilt here.";
+    } else {
+        message = "No need to be perfect. One little step is a win—your focus buddy is rooting for you.";
+    }
+
+    setPomodoroBuddyMessage(message);
+}
+
+function getPomodoroSessionDuration(task) {
+    const remainingMinutes = Number(task?.duration);
+    if (!task || task.completed || !Number.isFinite(remainingMinutes) || remainingMinutes <= 0) {
+        return pomodoroDurationMinutes;
+    }
+
+    return Math.min(
+        pomodoroDurationMinutes,
+        Math.max(MIN_POMODORO_MINUTES, Math.floor(remainingMinutes))
+    );
 }
 
 function selectPomodoroTask(taskId) {
@@ -1429,13 +1481,15 @@ function selectPomodoroTask(taskId) {
     selectedPomodoroTaskId = taskId || null;
     pomodoroElapsedSeconds = 0;
     const task = tasks.find(item => String(item.id) === String(selectedPomodoroTaskId));
-    pomodoroSeconds = pomodoroDurationMinutes * 60;
+    pomodoroSessionDurationMinutes = getPomodoroSessionDuration(task);
+    pomodoroSeconds = pomodoroSessionDurationMinutes * 60;
     updatePomodoroDisplay();
     updatePomodoroDurationInputs();
     const status = document.getElementById("pomodoroStatus");
     if (status) status.textContent = task
-        ? `Linked to ${task.name} · ${Number(task.duration) || 0} mins remaining.`
+        ? `Linked to ${task.name} · ${Number(task.duration) || 0} mins remaining. Sprint length: ${pomodoroSessionDurationMinutes} mins.`
         : "General focus is unlinked; select a task to track its study debt.";
+    updatePomodoroBuddyMessage();
 }
 
 async function commitPomodoroProgress() {
@@ -1472,11 +1526,11 @@ function updatePomodoroDurationInputs() {
     const hoursInput = document.getElementById("pomodoroHours");
     const minutesInput = document.getElementById("pomodoroMinutes");
     if (hoursInput) {
-        hoursInput.value = String(Math.floor(pomodoroDurationMinutes / 60));
+        hoursInput.value = String(Math.floor(pomodoroSessionDurationMinutes / 60));
         hoursInput.disabled = Boolean(pomodoroInterval);
     }
     if (minutesInput) {
-        minutesInput.value = String(pomodoroDurationMinutes % 60);
+        minutesInput.value = String(pomodoroSessionDurationMinutes % 60);
         minutesInput.disabled = Boolean(pomodoroInterval);
     }
 }
@@ -1501,13 +1555,18 @@ function setPomodoroDuration() {
     }
 
     pomodoroDurationMinutes = duration;
-    pomodoroSeconds = duration * 60;
+    const selectedTask = tasks.find(task => String(task.id) === String(selectedPomodoroTaskId));
+    pomodoroSessionDurationMinutes = getPomodoroSessionDuration(selectedTask);
+    pomodoroSeconds = pomodoroSessionDurationMinutes * 60;
     pomodoroElapsedSeconds = 0;
     savePomodoroDuration();
-    if (status) status.textContent = "One small focus sprint at a time.";
+    if (status) status.textContent = selectedTask && pomodoroSessionDurationMinutes < duration
+        ? `Sprint length capped at ${pomodoroSessionDurationMinutes} mins to fit the task's remaining time.`
+        : "One small focus sprint at a time.";
     const startButton = document.getElementById("pomodoroStartButton");
     if (startButton) startButton.innerHTML = `<i class="fa-solid fa-play"></i> Start focus`;
     updatePomodoroDisplay();
+    updatePomodoroBuddyMessage();
 }
 
 function updatePomodoroDisplay() {
@@ -1541,7 +1600,7 @@ function updatePomodoroControls() {
         ? `<i class="fa-solid fa-pause"></i> Pause`
         : pomodoroSeconds <= 0
             ? `<i class="fa-solid fa-rotate-right"></i> Start another`
-            : `<i class="fa-solid fa-play"></i> ${pomodoroSeconds < pomodoroDurationMinutes * 60 ? "Resume focus" : "Start focus"}`;
+            : `<i class="fa-solid fa-play"></i> ${pomodoroSeconds < pomodoroSessionDurationMinutes * 60 ? "Resume focus" : "Start focus"}`;
     if (startButton) startButton.innerHTML = buttonMarkup;
     if (taskSelect) taskSelect.disabled = Boolean(pomodoroInterval);
     if (pipStartButton) {
@@ -1549,7 +1608,7 @@ function updatePomodoroControls() {
             ? "Pause"
             : pomodoroSeconds <= 0
                 ? "Start another"
-                : pomodoroSeconds < pomodoroDurationMinutes * 60
+                : pomodoroSeconds < pomodoroSessionDurationMinutes * 60
                     ? "Resume"
                     : "Start";
     }
@@ -1558,7 +1617,7 @@ function updatePomodoroControls() {
             ? "Pause"
             : pomodoroSeconds <= 0
                 ? "Start another"
-                : pomodoroSeconds < pomodoroDurationMinutes * 60
+                : pomodoroSeconds < pomodoroSessionDurationMinutes * 60
                     ? "Resume"
                     : "Start";
     }
@@ -1577,12 +1636,18 @@ async function togglePomodoro() {
             : hadLinkedTask
                 ? "Focus paused. Whole studied minutes have been saved."
                 : "Focus paused. No task was linked, so no study debt changed.";
+        updatePomodoroBuddyMessage();
+        if (completedTask) {
+            setPomodoroBuddyMessage("Task complete! Your study debt is paid off. Take a tiny victory wiggle.");
+        }
         updatePomodoroControls();
         return;
     }
 
     if (pomodoroSeconds <= 0) {
-        pomodoroSeconds = pomodoroDurationMinutes * 60;
+        const selectedTask = tasks.find(task => String(task.id) === String(selectedPomodoroTaskId));
+        pomodoroSessionDurationMinutes = getPomodoroSessionDuration(selectedTask);
+        pomodoroSeconds = pomodoroSessionDurationMinutes * 60;
         pomodoroElapsedSeconds = 0;
         const status = document.getElementById("pomodoroStatus");
         if (status) status.textContent = "One small focus sprint at a time.";
@@ -1591,6 +1656,7 @@ async function togglePomodoro() {
         pomodoroSeconds -= 1;
         pomodoroElapsedSeconds += 1;
         updatePomodoroDisplay();
+        updatePomodoroBuddyMessage();
         if (pomodoroSeconds <= 0) {
             clearInterval(pomodoroInterval);
             pomodoroInterval = null;
@@ -1603,6 +1669,10 @@ async function togglePomodoro() {
                     : hadLinkedTask
                         ? "Focus session complete. Whole studied minutes were applied to your task."
                         : "Focus session complete. No task was linked, so no study debt changed.";
+                updatePomodoroBuddyMessage();
+                if (completedTask) {
+                    setPomodoroBuddyMessage("Task complete! Your study debt is paid off. Take a tiny victory wiggle.");
+                }
                 updatePomodoroControls();
                 if ("Notification" in window && Notification.permission === "granted") {
                     new Notification("StudyNest focus session complete", {
@@ -1684,13 +1754,19 @@ async function resetPomodoro() {
     if (pomodoroInterval) clearInterval(pomodoroInterval);
     pomodoroInterval = null;
     const completedTask = await commitPomodoroProgress();
-    pomodoroSeconds = pomodoroDurationMinutes * 60;
+    const selectedTask = tasks.find(task => String(task.id) === String(selectedPomodoroTaskId));
+    pomodoroSessionDurationMinutes = getPomodoroSessionDuration(selectedTask);
+    pomodoroSeconds = pomodoroSessionDurationMinutes * 60;
     pomodoroElapsedSeconds = 0;
     const status = document.getElementById("pomodoroStatus");
     if (status) status.textContent = completedTask
         ? "Task complete! You paid off its study debt. Amazing work!"
         : "One small focus sprint at a time.";
     updatePomodoroDisplay();
+    updatePomodoroBuddyMessage();
+    if (completedTask) {
+        setPomodoroBuddyMessage("Task complete! Your study debt is paid off. Take a tiny victory wiggle.");
+    }
 }
 
 // --- AI PLANNER LOGIC ---
