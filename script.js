@@ -325,6 +325,7 @@ async function navigateTo(pageName) {
             currentSubjectId = null;
             renderSubjects();
         }
+        if (pageName === "planner") initializePlannerForm();
         if (pageName === "calendar") renderCalendar();
         if (pageName === "progress") renderProgress();
         if (pageName === "pomodoro") renderPomodoro();
@@ -398,6 +399,15 @@ function parseDeadline(deadline) {
 function formatDeadline(deadline, options = { month: "short", day: "numeric" }) {
     const date = parseDeadline(deadline);
     return date ? date.toLocaleDateString(undefined, options) : "";
+}
+
+function isTodayOrFutureDeadline(deadline) {
+    const date = parseDeadline(deadline);
+    if (!date) return false;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return date >= today;
 }
 
 function getUpcomingTasks() {
@@ -1089,7 +1099,7 @@ function renderCalendar() {
     const today = new Date();
     const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     const tasksByDate = new Map();
-    tasks.filter(task => !task.completed && parseDeadline(task.deadline)).forEach(task => {
+    tasks.filter(task => !task.completed && isTodayOrFutureDeadline(task.deadline)).forEach(task => {
         if (!tasksByDate.has(task.deadline)) tasksByDate.set(task.deadline, []);
         tasksByDate.get(task.deadline).push(task);
     });
@@ -1109,7 +1119,7 @@ function renderCalendar() {
     grid.innerHTML = cells.join("");
 
     const monthTasks = tasks
-        .filter(task => !task.completed && parseDeadline(task.deadline))
+        .filter(task => !task.completed && isTodayOrFutureDeadline(task.deadline))
         .filter(task => {
             const date = parseDeadline(task.deadline);
             return date.getFullYear() === year && date.getMonth() === month;
@@ -1600,20 +1610,42 @@ function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
 }
 
-function buildFuzzyStudyPlan(topic, description, deadline, hours, difficulty) {
+function initializePlannerForm() {
+    const deadlineInput = document.getElementById("deadline");
+    if (!deadlineInput) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    deadlineInput.min = normalizeDeadlineString(today);
+}
+
+function timeToMinutes(time) {
+    const [hours, minutes] = time.split(":").map(Number);
+    return hours * 60 + minutes;
+}
+
+function formatTimeLabel(time) {
+    const [hours, minutes] = time.split(":").map(Number);
+    return new Date(2000, 0, 1, hours, minutes).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit"
+    });
+}
+
+function buildFuzzyStudyPlan(topic, description, deadline, hours, difficulty, availableDays) {
     const deadlineDate = parseDeadline(deadline);
     if (!deadlineDate) return { days: [], summary: "Please choose a valid date." };
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const daysLeft = Math.max(1, Math.ceil((deadlineDate - today) / 86400000));
+    const daysLeft = Math.max(1, Math.ceil((Date.UTC(deadlineDate.getFullYear(), deadlineDate.getMonth(), deadlineDate.getDate()) -
+        Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000) + 1);
     const difficultyWeight = { Easy: 0.35, Medium: 0.55, Hard: 0.8 }[difficulty] || 0.55;
     const urgencyScore = daysLeft <= 3 ? 1 : daysLeft <= 7 ? 0.8 : daysLeft <= 14 ? 0.55 : 0.3;
     const timeCapacity = hours >= 4 ? 1 : hours >= 3 ? 0.75 : hours >= 2 ? 0.55 : 0.3;
     const intensity = clamp(urgencyScore * 0.65 + timeCapacity * 0.35 + difficultyWeight * 0.4, 0.2, 1);
     const totalStudyDays = clamp(Math.max(3, Math.ceil(daysLeft / (1.7 - intensity * 0.5))), 3, 14);
-    const baseMinutes = Math.max(30, Math.round(hours * 60 * (0.75 + intensity * 0.25)));
 
     const labels = {
         low: "Steady build",
@@ -1623,17 +1655,32 @@ function buildFuzzyStudyPlan(topic, description, deadline, hours, difficulty) {
     const intensityLabel = intensity >= 0.8 ? labels.high : intensity >= 0.55 ? labels.medium : labels.low;
     const focusLabel = daysLeft <= 3 ? "Urgent review" : daysLeft <= 7 ? "Priority sprint" : "Consistent progress";
 
-    const days = Array.from({ length: totalStudyDays }, (_, index) => {
+    const availableDates = [];
+    const dateCursor = new Date(today);
+    while (dateCursor <= deadlineDate) {
+        if (availableDays.includes(dateCursor.getDay())) availableDates.push(new Date(dateCursor));
+        dateCursor.setDate(dateCursor.getDate() + 1);
+    }
+
+    if (!availableDates.length) {
+        return { days: [], summary: "No selected study days fall on or before that deadline. Choose another day or move the deadline." };
+    }
+
+    const sessionCount = Math.min(totalStudyDays, availableDates.length);
+    const selectedDates = Array.from({ length: sessionCount }, (_, index) =>
+        availableDates[Math.floor(index * availableDates.length / sessionCount)]
+    );
+    const days = selectedDates.map((scheduledDate, index) => {
         const dayNumber = index + 1;
-        const isFinalDay = dayNumber === totalStudyDays;
-        const sessionMinutes = Math.round(baseMinutes * (isFinalDay ? 1.2 : 0.9 + (index / totalStudyDays) * 0.2));
+        const isFinalDay = dayNumber === sessionCount;
         const focusLine = isFinalDay
             ? `Final review + active recall for ${topic}.${description ? ` ${description}` : ""}`
             : `Build understanding of ${topic}${description ? ` (${description})` : ""} with short review blocks.`;
 
         return {
             dayNumber,
-            sessionMinutes,
+            date: normalizeDeadlineString(scheduledDate),
+            sessionMinutes: hours * 60,
             focusLine,
             label: dayNumber === 1 ? focusLabel : isFinalDay ? "Final check" : "Practice block"
         };
@@ -1645,7 +1692,7 @@ function buildFuzzyStudyPlan(topic, description, deadline, hours, difficulty) {
         totalStudyDays,
         intensityLabel,
         energyLabel: urgencyScore >= 0.8 ? "High urgency" : urgencyScore >= 0.5 ? "Moderate urgency" : "Gentle pace",
-        summary: `${intensityLabel} plan · ${hours}h/day · ${daysLeft} day${daysLeft === 1 ? "" : "s"} to deadline.`
+        summary: `${intensityLabel} plan · ${days.length} session${days.length === 1 ? "" : "s"} · ${hours}h per session, scheduled on your available days.`
     };
 }
 
@@ -1658,22 +1705,45 @@ async function generatePlan() {
     const deadline = document.getElementById("deadline").value;
     const hours = Number(document.getElementById("dailyHours").value);
     const difficulty = document.getElementById("difficulty").value;
+    const availableDays = Array.from(document.querySelectorAll('input[name="studyDay"]:checked'))
+        .map(input => Number(input.value));
+    const availableFrom = document.getElementById("availableFrom").value;
+    const availableUntil = document.getElementById("availableUntil").value;
+    const formMessage = document.getElementById("plannerFormMessage");
+    const showFormMessage = message => {
+        formMessage.textContent = message;
+        formMessage.classList.remove("hidden");
+    };
 
-    if (!topic || !deadline) return alert("Please choose a subject or material and set a target deadline.");
+    formMessage.classList.add("hidden");
+    if (!topic || !deadline) return showFormMessage("Choose a subject or material and set a target deadline.");
 
     const deadlineDate = parseDeadline(deadline);
-    if (!deadlineDate) return alert("Please choose a valid target deadline.");
+    if (!deadlineDate) return showFormMessage("Please choose a valid target deadline.");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (deadlineDate < today) return showFormMessage("The target deadline must be today or later.");
+    if (!availableDays.length) return showFormMessage("Select at least one day when you’re free to study.");
+    if (!availableFrom || !availableUntil || timeToMinutes(availableUntil) <= timeToMinutes(availableFrom)) {
+        return showFormMessage("Choose an availability window that ends after it starts.");
+    }
+    if (timeToMinutes(availableUntil) - timeToMinutes(availableFrom) < hours * 60) {
+        return showFormMessage(`Your availability window must be at least ${hours} hour${hours === 1 ? "" : "s"} long.`);
+    }
 
     const resultDiv = document.getElementById("generatedPlan");
     resultDiv.innerHTML = "";
 
-    const fuzzyPlan = buildFuzzyStudyPlan(topic, description, deadline, hours, difficulty);
+    const fuzzyPlan = buildFuzzyStudyPlan(topic, description, deadline, hours, difficulty, availableDays);
+    if (!fuzzyPlan.days.length) return showFormMessage(fuzzyPlan.summary);
+    const sessionEndMinutes = timeToMinutes(availableFrom) + hours * 60;
+    const sessionEnd = `${String(Math.floor(sessionEndMinutes / 60)).padStart(2, "0")}:${String(sessionEndMinutes % 60).padStart(2, "0")}`;
     fuzzyPlan.days.forEach(day => {
         const dayCard = document.createElement("div");
         dayCard.className = "plan-day-card";
         dayCard.innerHTML = `
-            <h4>Day ${day.dayNumber}</h4>
-            <p><i class="fa-regular fa-clock"></i> ${day.sessionMinutes} mins</p>
+            <h4>Session ${day.dayNumber} · ${formatDeadline(day.date, { weekday: "long", month: "short", day: "numeric" })}</h4>
+            <p><i class="fa-regular fa-clock"></i> ${formatTimeLabel(availableFrom)}–${formatTimeLabel(sessionEnd)} · ${day.sessionMinutes} mins</p>
             <p><strong>${escapeHtml(day.label)}</strong> · ${escapeHtml(day.focusLine)}</p>
         `;
         resultDiv.appendChild(dayCard);
@@ -1735,6 +1805,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initializeTheme();
     updateSidebarAccessibility();
     window.addEventListener("resize", updateSidebarAccessibility);
+    navigateTo("home");
 
     // Fetch live data directly from Google Sheet before rendering, but keep local storage as the source of truth if the sheet is empty or unavailable
     await loadDataFromSheet();
@@ -1751,5 +1822,4 @@ document.addEventListener('DOMContentLoaded', async () => {
             closePlannerMaterialResults();
         }
     });
-    navigateTo('home');
 });

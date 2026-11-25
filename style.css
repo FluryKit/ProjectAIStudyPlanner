@@ -2026,6 +2026,63 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     margin-top: 7px;
 }
 
+.availability-fieldset {
+    min-width: 0;
+    margin: 0 0 16px;
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+}
+
+.availability-fieldset legend {
+    padding: 0 6px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.availability-day-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.availability-day-option {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 40px;
+    margin: 0;
+    padding: 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 9px;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.availability-day-option input {
+    width: auto;
+    margin: 0;
+    accent-color: var(--accent-sage);
+}
+
+.availability-time-row {
+    margin-top: 14px;
+}
+
+.availability-time-row .form-group {
+    margin-bottom: 0;
+}
+
+.planner-form-message {
+    margin: 0 0 14px;
+    color: #d9534f;
+    font-size: 13px;
+}
+
 .optional-label {
     margin-left: 5px;
     font-weight: 400;

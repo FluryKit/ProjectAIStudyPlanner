@@ -2,7 +2,7 @@
     <div class="welcome-header">
         <p class="small-tag"><i class="fa-solid fa-robot"></i> Intelligent Scheduling</p>
         <h1>AI Study Planner</h1>
-        <p>Describe your goal, and automatically build a structured daily study plan.</p>
+        <p>Tell us what you need to study, when it’s due, and when you’re free. We’ll fit focused sessions around your week.</p>
     </div>
 
     <div class="card">
@@ -42,6 +42,30 @@
             </div>
         </div>
 
+        <fieldset class="availability-fieldset">
+            <legend>When are you free to study?</legend>
+            <p class="form-hint">Choose the days you have time. Uncheck days when you’re busy.</p>
+            <div class="availability-day-grid">
+                <label class="availability-day-option"><input type="checkbox" name="studyDay" value="1" checked> Mon</label>
+                <label class="availability-day-option"><input type="checkbox" name="studyDay" value="2" checked> Tue</label>
+                <label class="availability-day-option"><input type="checkbox" name="studyDay" value="3" checked> Wed</label>
+                <label class="availability-day-option"><input type="checkbox" name="studyDay" value="4" checked> Thu</label>
+                <label class="availability-day-option"><input type="checkbox" name="studyDay" value="5" checked> Fri</label>
+                <label class="availability-day-option"><input type="checkbox" name="studyDay" value="6"> Sat</label>
+                <label class="availability-day-option"><input type="checkbox" name="studyDay" value="0"> Sun</label>
+            </div>
+            <div class="form-row availability-time-row">
+                <div class="form-group">
+                    <label for="availableFrom">I’m free from</label>
+                    <input type="time" id="availableFrom" value="18:00">
+                </div>
+                <div class="form-group">
+                    <label for="availableUntil">until</label>
+                    <input type="time" id="availableUntil" value="21:00">
+                </div>
+            </div>
+        </fieldset>
+
         <div class="form-group">
             <label for="difficulty">Subject Difficulty</label>
             <select id="difficulty">
@@ -51,6 +75,7 @@
             </select>
         </div>
 
+        <p class="planner-form-message hidden" id="plannerFormMessage" role="alert"></p>
         <button class="primary-button" onclick="generatePlan()">
             <i class="fa-solid fa-wand-magic-sparkles"></i> Generate AI Study Plan
         </button>
