@@ -8,6 +8,16 @@
     --text-secondary: #A9A295;
     --accent-sage: #8BA88E;
     --accent-soft: rgba(139, 168, 142, 0.12);
+    --warning-text: #E0964E;
+    --warning-surface: rgba(224, 150, 78, 0.12);
+    --warning-border: rgba(224, 150, 78, 0.3);
+    --warning-action: #d99a55;
+    --warning-action-border: rgba(224, 150, 78, 0.35);
+    --warning-marker: #d99a55;
+    --danger-text: #d9534f;
+    --danger-surface: rgba(217, 83, 79, 0.08);
+    --danger-border: rgba(217, 83, 79, 0.3);
+    --danger-hover-border: rgba(217, 83, 79, 0.5);
     --shadow-soft: 0 12px 34px rgba(0, 0, 0, 0.15);
 }
 
@@ -21,6 +31,16 @@ body.light-mode {
     --text-secondary: #5C655F;
     --accent-sage: #4E6E52;
     --accent-soft: #EAF2EB;
+    --warning-text: #704009;
+    --warning-surface: #FFF1CF;
+    --warning-border: #D1A74B;
+    --warning-action: #704009;
+    --warning-action-border: #BD852A;
+    --warning-marker: #A05C08;
+    --danger-text: #A32323;
+    --danger-surface: #FCEBEA;
+    --danger-border: #D79A96;
+    --danger-hover-border: #A32323;
     --shadow-soft: 0 10px 28px rgba(33, 48, 38, 0.08);
 }
 
@@ -238,14 +258,14 @@ input:hover, select:hover, textarea:hover {
 
 .alert-banner {
     display: flex; gap: 12px; align-items: center; padding: 14px;
-    background: rgba(224, 150, 78, 0.12); border: 1px solid rgba(224, 150, 78, 0.3);
-    border-radius: 10px; color: #E0964E; margin-bottom: 24px; font-size: 14px;
+    background: var(--warning-surface); border: 1px solid var(--warning-border);
+    border-radius: 10px; color: var(--warning-text); margin-bottom: 24px; font-size: 14px;
 }
 .subject-item {
     display: flex; justify-content: space-between; align-items: center;
     padding: 12px; background: var(--bg-subcard); border-radius: 8px; margin-bottom: 8px;
 }
-.delete-btn { background: transparent; border: none; color: #d9534f; cursor: pointer; }
+.delete-btn { background: transparent; border: none; color: var(--danger-text); cursor: pointer; }
 .hidden { display: none; }
 .app-footer { text-align: center; padding: 30px; font-size: 13px; color: var(--text-secondary); border-top: 1px solid var(--border-color); }
 
@@ -622,12 +642,12 @@ input:hover, select:hover, textarea:hover {
     color: var(--accent-sage);
 }
 .topic-action-button.danger {
-    color: #d9534f;
+    color: var(--danger-text);
 }
 .topic-action-button.danger:hover {
-    background: rgba(217, 83, 79, 0.08);
-    border-color: rgba(217, 83, 79, 0.5);
-    color: #d9534f;
+    background: var(--danger-surface);
+    border-color: var(--danger-hover-border);
+    color: var(--danger-text);
 }
 .file-upload-label { display: inline-block; cursor: pointer; font-size: 12px; color: var(--accent-sage); margin: 8px 0; font-weight: 600; }
 .file-upload-label input { display: none; }
@@ -637,7 +657,7 @@ input:hover, select:hover, textarea:hover {
 .file-list a { color: var(--text-primary); text-decoration: none; word-break: break-all; }
 .file-list li > a:first-child { flex: 1; min-width: 0; }
 .file-download-link { flex: none; color: var(--accent-sage) !important; }
-.remove-file-icon { cursor: pointer; color: #d9534f; margin-left: 8px; }
+.remove-file-icon { cursor: pointer; color: var(--danger-text); margin-left: 8px; }
 
 /* Pomodoro Timer Styling */
 .pomodoro-card { text-align: center; max-width: 500px; margin: 0 auto; }
@@ -1064,7 +1084,7 @@ body.light-mode .top-utility-bar {
     width: 8px;
     height: 8px;
     margin-top: 5px;
-    background: #d99a55;
+    background: var(--warning-marker);
     border-radius: 50%;
 }
 
@@ -1446,9 +1466,9 @@ body.light-mode .top-utility-bar {
     flex: none;
     margin-left: auto;
     padding: 7px 10px;
-    color: #d99a55;
+    color: var(--warning-action);
     background: transparent;
-    border: 1px solid rgba(224, 150, 78, 0.35);
+    border: 1px solid var(--warning-action-border);
     border-radius: 8px;
     cursor: pointer;
     font-size: 11px;
@@ -1883,6 +1903,147 @@ body.light-mode .top-utility-bar {
     color: var(--accent-sage);
 }
 
+.focus-music {
+    margin-top: 18px;
+    border-top: 1px solid var(--border-color);
+    text-align: left;
+}
+
+.focus-music summary {
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr) 18px;
+    align-items: center;
+    gap: 10px;
+    padding-top: 16px;
+    cursor: pointer;
+    list-style: none;
+}
+
+.focus-music summary::-webkit-details-marker {
+    display: none;
+}
+
+.focus-music summary:focus-visible {
+    outline: 2px solid var(--accent-sage);
+    outline-offset: 4px;
+    border-radius: 8px;
+}
+
+.focus-music-icon {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    place-items: center;
+    color: var(--accent-sage);
+    background: var(--accent-soft);
+    border-radius: 12px;
+}
+
+.focus-music-heading {
+    display: grid;
+    gap: 2px;
+}
+
+.focus-music-heading strong {
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.focus-music-heading small {
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+.focus-music-chevron {
+    color: var(--text-secondary);
+    transition: transform 0.18s ease;
+}
+
+.focus-music[open] .focus-music-chevron {
+    transform: rotate(180deg);
+}
+
+.focus-music-content {
+    padding-top: 16px;
+}
+
+.focus-music-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.focus-music-actions button {
+    width: auto;
+    min-height: 40px;
+    padding: 9px 12px;
+}
+
+.focus-music-stop {
+    margin-left: auto;
+}
+
+.focus-music-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.focus-music-form label {
+    grid-column: 1 / -1;
+    margin: 0;
+}
+
+.focus-music-form input {
+    min-width: 0;
+}
+
+.focus-music-form button {
+    width: auto;
+    min-height: 42px;
+    padding: 10px 16px;
+}
+
+.focus-music-status {
+    min-height: 1.5em;
+    margin-top: 10px;
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+.focus-music-fallback:not(.hidden) {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    color: var(--accent-sage);
+    font-size: 12px;
+    text-decoration: none;
+}
+
+.focus-music-fallback:not(.hidden):hover {
+    text-decoration: underline;
+}
+
+.focus-music-player {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    margin-top: 12px;
+    overflow: hidden;
+    background: var(--bg-subcard);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+}
+
+.focus-music-player iframe {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
 .pomodoro-mini-dock {
     position: fixed;
     z-index: 1200;
@@ -2238,7 +2399,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 .planner-form-message {
     margin: 0 0 14px;
-    color: #d9534f;
+    color: var(--danger-text);
     font-size: 13px;
 }
 
@@ -2388,9 +2549,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 }
 
 .history-delete-button {
-    border: 1px solid rgba(217, 83, 79, 0.3);
-    background: rgba(217, 83, 79, 0.08);
-    color: #d9534f;
+    border: 1px solid var(--danger-border);
+    background: var(--danger-surface);
+    color: var(--danger-text);
 }
 
 .history-empty-state {
@@ -2806,5 +2967,34 @@ body:has(.sketch-landing-container) .app-main-wrapper {
         gap: 5px;
         padding: 6px 4px;
         font-size: 11px;
+    }
+}
+
+@media (max-width: 520px) {
+    .focus-music-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .focus-music-actions button {
+        width: 100%;
+        min-width: 0;
+        justify-content: center;
+    }
+
+    .focus-music-stop {
+        margin-left: 0;
+    }
+
+    .focus-music-form {
+        grid-template-columns: 1fr;
+    }
+
+    .focus-music-form label {
+        grid-column: auto;
+    }
+
+    .focus-music-form button {
+        width: 100%;
     }
 }

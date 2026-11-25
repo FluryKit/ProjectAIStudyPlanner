@@ -11,6 +11,10 @@ const POMODORO_BUDDY_CHECK_INS = [
     "Tiny progress is still progress. Your brain is collecting XP.",
     "A future-you high-five is being prepared. Keep going at your own pace."
 ];
+const FOCUS_MUSIC_PRESETS = {
+    lofi: "rFZHOHl-L8A",
+    jazz: "Dx5qFachd3A"
+};
 
 // In-Memory App State (Zero LocalStorage)
 let subjects = [];
@@ -1462,6 +1466,114 @@ function updatePomodoroBuddyMessage() {
     }
 
     setPomodoroBuddyMessage(message);
+}
+
+function getYouTubeEmbedUrl(value) {
+    let url;
+    try {
+        url = new URL(String(value || "").trim());
+    } catch {
+        return null;
+    }
+
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    const pathSegments = url.pathname.split("/").filter(Boolean);
+    let videoId = null;
+
+    if (hostname === "youtu.be") {
+        videoId = pathSegments[0] || null;
+    } else if (["youtube.com", "m.youtube.com", "music.youtube.com"].includes(hostname)) {
+        videoId = url.searchParams.get("v");
+        if (!videoId && ["embed", "shorts", "live"].includes(pathSegments[0])) {
+            videoId = pathSegments[1] || null;
+        }
+    } else {
+        return null;
+    }
+
+    const playlistId = url.searchParams.get("list");
+    const validVideoId = videoId && /^[a-zA-Z0-9_-]{11}$/.test(videoId);
+    const validPlaylistId = playlistId && /^[a-zA-Z0-9_-]{10,100}$/.test(playlistId);
+
+    if (validVideoId) {
+        const parameters = new URLSearchParams({ autoplay: "1" });
+        if (validPlaylistId) parameters.set("list", playlistId);
+        return `https://www.youtube-nocookie.com/embed/${videoId}?${parameters.toString()}`;
+    }
+
+    if (validPlaylistId) {
+        const parameters = new URLSearchParams({ list: playlistId, autoplay: "1" });
+        return `https://www.youtube-nocookie.com/embed/videoseries?${parameters.toString()}`;
+    }
+
+    return null;
+}
+
+function startFocusMusic(embedUrl, title, youtubeUrl) {
+    const player = document.getElementById("focusMusicPlayer");
+    const status = document.getElementById("focusMusicStatus");
+    if (!player) return;
+
+    player.innerHTML = `<iframe src="${embedUrl}" title="${escapeHtml(title)}"
+        allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"
+        allowfullscreen></iframe>`;
+    player.classList.remove("hidden");
+    if (status) status.textContent = `Playing ${title}. Use the player controls to adjust the sound.`;
+    const fallbackLink = document.getElementById("focusMusicFallback");
+    if (fallbackLink) {
+        fallbackLink.href = youtubeUrl;
+        fallbackLink.classList.remove("hidden");
+    }
+}
+
+function playFocusMusicPreset(presetName) {
+    const videoId = FOCUS_MUSIC_PRESETS[presetName];
+    if (!videoId) {
+        const status = document.getElementById("focusMusicStatus");
+        if (status) status.textContent = "That music option isn't available. Choose lo-fi or soft jazz.";
+        return;
+    }
+
+    const title = presetName === "lofi" ? "lo-fi radio" : "soft jazz";
+    const embedHost = presetName === "lofi" ? "www.youtube.com" : "www.youtube-nocookie.com";
+    const youtubeUrl = presetName === "lofi"
+        ? `https://www.youtube.com/live/${videoId}`
+        : `https://www.youtube.com/watch?v=${videoId}`;
+    startFocusMusic(
+        `https://${embedHost}/embed/${videoId}?autoplay=1`,
+        title,
+        youtubeUrl
+    );
+}
+
+function playCustomFocusMusic(event) {
+    event.preventDefault();
+    const input = document.getElementById("customFocusMusicUrl");
+    const status = document.getElementById("focusMusicStatus");
+    const embedUrl = getYouTubeEmbedUrl(input?.value);
+    if (!embedUrl) {
+        if (status) status.textContent = "Use a YouTube video or playlist link from youtube.com or youtu.be.";
+        input?.focus();
+        return;
+    }
+
+    startFocusMusic(embedUrl, "your YouTube link", input.value.trim());
+}
+
+function stopFocusMusic() {
+    const player = document.getElementById("focusMusicPlayer");
+    const status = document.getElementById("focusMusicStatus");
+    const fallbackLink = document.getElementById("focusMusicFallback");
+    if (player) {
+        player.innerHTML = "";
+        player.classList.add("hidden");
+    }
+    if (fallbackLink) {
+        fallbackLink.classList.add("hidden");
+        fallbackLink.removeAttribute("href");
+    }
+    if (status) status.textContent = "Music stopped. Your focus session is still going.";
 }
 
 function getPomodoroSessionDuration(task) {
