@@ -26,11 +26,13 @@
             </div>
             <div class="calendar-grid" id="calendarGrid" aria-label="Calendar dates"></div>
             <div class="calendar-legend"><span></span> Study deadline</div>
+            <div class="calendar-legend calendar-free-day-legend"><span></span> Study day from your plan</div>
         </section>
 
         <aside class="card calendar-deadlines-card">
             <div class="section-title">
-                <div><p class="small-tag">STAY ON TRACK</p><h2>This month's deadlines</h2></div>
+                <div><p class="small-tag">STAY ON TRACK</p><h2 id="calendarDeadlineTitle">This month's deadlines</h2></div>
+                <button type="button" class="secondary-button calendar-show-all-button hidden" id="calendarShowAllButton" onclick="selectCalendarDate(null)">Show all month</button>
                 <i class="fa-solid fa-bell calendar-title-icon"></i>
             </div>
             <div id="calendarDeadlineList" class="calendar-deadline-list"></div>

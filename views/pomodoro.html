@@ -6,6 +6,12 @@
     </div>
     <section class="card pomodoro-card">
         <span class="pomodoro-overline"><i class="fa-solid fa-leaf"></i> FOCUS SESSION</span>
+        <div class="form-group pomodoro-task-select">
+            <label for="pomodoroTaskSelect">Focusing on</label>
+            <select id="pomodoroTaskSelect" onchange="selectPomodoroTask(this.value)">
+                <option value="">General focus session (unlinked)</option>
+            </select>
+        </div>
         <div class="pomodoro-duration-control">
             <span>Session length</span>
             <div class="pomodoro-duration-input" role="group" aria-label="Session length">

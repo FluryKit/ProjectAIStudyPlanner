@@ -205,6 +205,17 @@ input:checked + .slider .slider-knob .icon-light {
 .task-details { display: flex; flex-direction: column; }
 .task-title { font-size: 14px; font-weight: 600; }
 .task-meta { font-size: 12px; color: var(--text-secondary); }
+.task-deadline-edit {
+    flex: none;
+    padding: 6px 8px;
+    color: var(--accent-sage);
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 10px;
+    cursor: pointer;
+}
+.task-deadline-edit:hover { background: var(--accent-soft); }
 
 .form-group { margin-bottom: 16px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -1469,14 +1480,19 @@ body.light-mode .top-utility-bar {
 .calendar-day {
     position: relative;
     display: flex;
+    width: 100%;
     min-height: 62px;
     align-items: flex-start;
     justify-content: center;
     padding: 11px 5px;
     color: var(--text-primary);
+    background: transparent;
     border: 1px solid transparent;
     border-radius: 9px;
+    font-family: inherit;
     font-size: 12px;
+    text-align: center;
+    cursor: pointer;
 }
 
 .calendar-day.is-today {
@@ -1487,6 +1503,23 @@ body.light-mode .top-utility-bar {
 
 .calendar-day.has-deadline {
     background: var(--accent-soft);
+}
+
+.calendar-day.is-selected {
+    outline: 2px solid var(--accent-sage);
+    outline-offset: 1px;
+}
+
+.calendar-day.is-free-day::after {
+    position: absolute;
+    right: 7px;
+    bottom: 7px;
+    width: 5px;
+    height: 5px;
+    background: var(--accent-sage);
+    border-radius: 50%;
+    content: "";
+    opacity: 0.65;
 }
 
 .calendar-day-count {
@@ -1520,6 +1553,11 @@ body.light-mode .top-utility-bar {
     height: 9px;
     background: var(--accent-sage);
     border-radius: 50%;
+}
+
+.calendar-free-day-legend span {
+    background: transparent;
+    border: 1px solid var(--accent-sage);
 }
 
 .calendar-title-icon {
@@ -1561,6 +1599,10 @@ body.light-mode .top-utility-bar {
 .calendar-task-time {
     color: var(--text-secondary);
     font-size: 10px;
+}
+
+.calendar-task-item.is-completed {
+    opacity: 0.65;
 }
 
 .calendar-deadline-list .empty-text {
@@ -1681,6 +1723,12 @@ body.light-mode .top-utility-bar {
     padding: clamp(28px, 6vw, 54px);
     border-radius: 20px;
     text-align: center;
+}
+
+.pomodoro-task-select {
+    max-width: 340px;
+    margin: 18px auto 0;
+    text-align: left;
 }
 
 .pomodoro-overline {
@@ -1906,6 +1954,41 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .dashboard-columns .column-sidebar h2,
 .dashboard-columns .column-main h2 {
     font-size: 17px;
+}
+
+.queue-date-label {
+    margin: 14px 0 8px;
+    color: var(--accent-sage);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.study-queue-list {
+    display: grid;
+    gap: 10px;
+}
+
+.study-queue-item {
+    display: grid;
+    gap: 7px;
+    padding: 12px;
+    background: var(--bg-subcard);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+}
+
+.study-queue-item strong {
+    font-size: 12px;
+}
+
+.study-queue-item > span {
+    color: var(--text-secondary);
+    font-size: 10px;
+}
+
+.study-queue-item .secondary-button {
+    padding: 8px 12px;
+    font-size: 11px;
 }
 
 .dashboard-new-task {

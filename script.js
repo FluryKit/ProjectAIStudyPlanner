@@ -12,8 +12,11 @@ let currentSubjectId = null;
 let pomodoroDurationMinutes = loadPomodoroDuration();
 let pomodoroSeconds = pomodoroDurationMinutes * 60;
 let pomodoroInterval = null;
+let pomodoroElapsedSeconds = 0;
+let selectedPomodoroTaskId = null;
 let pomodoroPipWindow = null;
 let pomodoroMiniDockOpen = false;
+let selectedCalendarDate = null;
 let plannerMaterialMatches = [];
 let activePlannerMaterialIndex = -1;
 let notificationReadIds = new Set();
@@ -202,12 +205,7 @@ function sanitizeTaskDeadline(task) {
     }
 
     const normalized = normalizeDeadlineString(task.deadline);
-    if (!normalized || !/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-        delete task.deadline;
-        return task;
-    }
-
-    task.deadline = normalized;
+    if (parseDeadline(normalized)) task.deadline = normalized;
     return task;
 }
 
@@ -286,8 +284,8 @@ async function loadDataFromSheet() {
     }
 }
 
-async function syncTaskToSheet(task) {
-    await saveAppState();
+async function syncTaskToSheet(task, shouldSaveState = true) {
+    if (shouldSaveState) await saveAppState();
 
     if (!APPS_SCRIPT_URL) return;
 
@@ -341,7 +339,10 @@ async function navigateTo(pageName) {
             btn.classList.toggle("active", btn.dataset.page === pageName);
         });
 
-        if (pageName === "dashboard") renderTasks();
+        if (pageName === "dashboard") {
+            renderTasks();
+            renderDashboardQueue();
+        }
         if (pageName === "subjects") {
             currentSubjectId = null;
             renderSubjects();
@@ -420,15 +421,6 @@ function parseDeadline(deadline) {
 function formatDeadline(deadline, options = { month: "short", day: "numeric" }) {
     const date = parseDeadline(deadline);
     return date ? date.toLocaleDateString(undefined, options) : "";
-}
-
-function isTodayOrFutureDeadline(deadline) {
-    const date = parseDeadline(deadline);
-    if (!date) return false;
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return date >= today;
 }
 
 function getUpcomingTasks() {
@@ -883,6 +875,7 @@ function viewFile(subjectId, topicId, fileId) {
     try {
         const blobUrl = URL.createObjectURL(getFileBlob(file));
         window.open(blobUrl, '_blank');
+        window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
     } catch (err) {
         console.error("Error displaying file:", err);
         alert("Failed to view file preview.");
@@ -1017,6 +1010,7 @@ async function toggleTask(id) {
         }
         await syncTaskToSheet(task);
         renderTasks();
+        renderDashboardQueue();
         renderProgress();
         renderCalendar();
         renderNotificationPanel();
@@ -1071,12 +1065,97 @@ function renderTasks() {
             <label for="task-${task.id}" class="task-details">
                 <span class="task-title">${escapeHtml(task.name)}</span>
                 ${task.description ? `<span class="task-description">${escapeHtml(task.description)}</span>` : ""}
-                <span class="task-meta"><i class="fa-regular fa-clock"></i> ${Number(task.duration) || 0} mins${task.deadline ? ` <span class="task-deadline"><i class="fa-regular fa-calendar"></i> Due ${formatDeadline(task.deadline)}</span>` : ""}</span>
+                <span class="task-meta"><i class="fa-regular fa-clock"></i> ${Number(task.duration) || 0} mins${task.deadline ? ` <span class="task-deadline"><i class="fa-regular fa-calendar"></i> Due ${escapeHtml(formatDeadline(task.deadline) || task.deadline)}</span>` : ""}</span>
             </label>
+            <button type="button" class="task-deadline-edit" onclick="editTaskDeadline(${escapeHtml(JSON.stringify(String(task.id)))})" aria-label="${task.deadline ? "Edit" : "Set"} deadline for ${escapeHtml(task.name)}">
+                ${task.deadline ? "Edit due date" : "Set due date"}
+            </button>
         </div>
     `).join("");
 
     updateStats();
+}
+
+async function editTaskDeadline(taskId) {
+    const task = tasks.find(item => String(item.id) === String(taskId));
+    if (!task) return;
+
+    const nextDeadline = window.prompt(
+        "Enter the deadline as YYYY-MM-DD:",
+        parseDeadline(task.deadline) ? normalizeDeadlineString(task.deadline) : String(task.deadline || "")
+    );
+    if (nextDeadline === null) return;
+
+    const normalized = normalizeDeadlineString(nextDeadline);
+    if (!parseDeadline(normalized)) {
+        window.alert("Please enter a valid deadline date in YYYY-MM-DD format.");
+        return;
+    }
+
+    task.deadline = normalized;
+    const syncPromise = syncTaskToSheet(task);
+    renderTasks();
+    renderDashboardQueue();
+    renderCalendar();
+    renderNotificationPanel();
+    updateNotifications();
+    await syncPromise;
+}
+
+function renderDashboardQueue() {
+    const container = document.getElementById("todayStudyQueue");
+    if (!container) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayKey = normalizeDeadlineString(today);
+    const scheduledTasks = tasks
+        .filter(task => !task.completed && parseDeadline(task.deadline))
+        .sort((a, b) => a.deadline.localeCompare(b.deadline));
+    const todayTasks = scheduledTasks.filter(task => task.deadline === todayKey);
+    const nextTaskDate = todayTasks.length ? todayKey : scheduledTasks.find(task => {
+        const date = parseDeadline(task.deadline);
+        return date && date >= today;
+    })?.deadline;
+    const queueTasks = nextTaskDate
+        ? scheduledTasks.filter(task => task.deadline === nextTaskDate)
+        : [];
+
+    if (!queueTasks.length) {
+        container.innerHTML = `<p class="muted-text">No upcoming study sessions yet. Generate a plan to build your queue.</p>`;
+        return;
+    }
+
+    const date = parseDeadline(nextTaskDate);
+    const dateLabel = nextTaskDate === todayKey
+        ? "Today"
+        : date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+    container.innerHTML = `
+        <p class="queue-date-label">${escapeHtml(dateLabel)}</p>
+        <div class="study-queue-list">
+            ${queueTasks.map(task => `
+                <article class="study-queue-item">
+                    <strong>${escapeHtml(task.name)}</strong>
+                    <span>${escapeHtml(getTaskTimeSlot(task) || "Time not set")} · ${Number(task.duration) || 0} min left</span>
+                    <button class="secondary-button" type="button" onclick="startPomodoroForTask(${escapeHtml(JSON.stringify(String(task.id)))})">
+                        <i class="fa-solid fa-play"></i> Start Focus
+                    </button>
+                </article>
+            `).join("")}
+        </div>`;
+}
+
+async function startPomodoroForTask(taskId) {
+    if (pomodoroInterval && String(taskId) !== String(selectedPomodoroTaskId)) {
+        await navigateTo("pomodoro");
+        const status = document.getElementById("pomodoroStatus");
+        if (status) status.textContent = "Pause your current focus sprint before switching tasks.";
+        return;
+    }
+
+    selectedPomodoroTaskId = String(taskId);
+    await navigateTo("pomodoro");
+    selectPomodoroTask(taskId);
 }
 
 function updateStats() {
@@ -1122,11 +1201,18 @@ let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
 
 function changeCalendarMonth(offset) {
     calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + offset, 1);
+    selectedCalendarDate = null;
     renderCalendar();
 }
 
 function goToCurrentMonth() {
     calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    selectedCalendarDate = null;
+    renderCalendar();
+}
+
+function selectCalendarDate(dateKey) {
+    selectedCalendarDate = selectedCalendarDate === dateKey ? null : dateKey;
     renderCalendar();
 }
 
@@ -1135,6 +1221,7 @@ async function openDeadline(deadline) {
     const date = parseDeadline(deadline);
     if (date) {
         calendarMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+        selectedCalendarDate = normalizeDeadlineString(date);
         renderCalendar();
     }
 }
@@ -1143,6 +1230,8 @@ function renderCalendar() {
     const heading = document.getElementById("calendarMonthLabel");
     const grid = document.getElementById("calendarGrid");
     const list = document.getElementById("calendarDeadlineList");
+    const listHeading = document.getElementById("calendarDeadlineTitle");
+    const showAllButton = document.getElementById("calendarShowAllButton");
     if (!heading || !grid || !list) return;
 
     heading.textContent = calendarMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" });
@@ -1152,8 +1241,9 @@ function renderCalendar() {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const today = new Date();
     const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const availability = getAvailabilityPreferences();
     const tasksByDate = new Map();
-    tasks.filter(task => !task.completed && isTodayOrFutureDeadline(task.deadline)).forEach(task => {
+    tasks.filter(task => !task.completed && parseDeadline(task.deadline)).forEach(task => {
         if (!tasksByDate.has(task.deadline)) tasksByDate.set(task.deadline, []);
         tasksByDate.get(task.deadline).push(task);
     });
@@ -1163,29 +1253,46 @@ function renderCalendar() {
     for (let day = 1; day <= daysInMonth; day++) {
         const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
         const dayTasks = tasksByDate.get(dateKey) || [];
+        const weekday = new Date(year, month, day).getDay();
         const dayClasses = ["calendar-day"];
         if (dateKey === todayKey) dayClasses.push("is-today");
         if (dayTasks.length) dayClasses.push("has-deadline");
-        cells.push(`<div class="${dayClasses.join(" ")}" ${dayTasks.length ? `title="${dayTasks.length} deadline${dayTasks.length === 1 ? "" : "s"}"` : ""}>
+        const isScheduledFreeDay = dayTasks.length > 0 && availability.days.includes(weekday);
+        if (isScheduledFreeDay) dayClasses.push("is-free-day");
+        if (selectedCalendarDate === dateKey) dayClasses.push("is-selected");
+        const title = dayTasks.length
+            ? `${dayTasks.length} scheduled session${dayTasks.length === 1 ? "" : "s"}`
+            : "No scheduled sessions";
+        const freeTitle = isScheduledFreeDay
+            ? ` · Available ${formatTimeLabel(availability.availableFrom)}–${formatTimeLabel(availability.availableUntil)}`
+            : "";
+        cells.push(`<button type="button" class="${dayClasses.join(" ")}" onclick="selectCalendarDate('${dateKey}')" aria-pressed="${selectedCalendarDate === dateKey}" aria-label="${dateKey}: ${title}${freeTitle}" title="${title}${freeTitle}">
             <span>${day}</span>${dayTasks.length ? `<span class="calendar-day-count">${dayTasks.length}</span>` : ""}
-        </div>`);
+        </button>`);
     }
     grid.innerHTML = cells.join("");
 
-    const monthTasks = tasks
-        .filter(task => !task.completed && isTodayOrFutureDeadline(task.deadline))
-        .filter(task => {
-            const date = parseDeadline(task.deadline);
-            return date.getFullYear() === year && date.getMonth() === month;
-        })
-        .sort((a, b) => a.deadline.localeCompare(b.deadline));
+    const allMonthTasks = tasks.filter(task => {
+        const date = parseDeadline(task.deadline);
+        return date && date.getFullYear() === year && date.getMonth() === month;
+    });
+    const monthTasks = (selectedCalendarDate
+        ? allMonthTasks.filter(task => task.deadline === selectedCalendarDate)
+        : allMonthTasks.filter(task => !task.completed)
+    ).sort((a, b) => a.deadline.localeCompare(b.deadline));
+    if (listHeading) {
+        listHeading.textContent = selectedCalendarDate
+            ? `Sessions on ${formatDeadline(selectedCalendarDate, { weekday: "short", month: "short", day: "numeric" })}`
+            : "This month's deadlines";
+    }
+    if (showAllButton) showAllButton.classList.toggle("hidden", !selectedCalendarDate);
     list.innerHTML = monthTasks.length
-        ? monthTasks.map(task => `<div class="calendar-task-item">
+        ? monthTasks.map(task => `<div class="calendar-task-item${task.completed ? " is-completed" : ""}">
             <span class="calendar-task-date">${formatDeadline(task.deadline, { weekday: "short", month: "short", day: "numeric" })}</span>
             <span class="calendar-task-name">${escapeHtml(task.name)}</span>
-            <span class="calendar-task-time">${Number(task.duration) || 0} min</span>
+            <span class="calendar-task-time">${escapeHtml(getTaskTimeSlot(task))}${getTaskTimeSlot(task) ? " · " : ""}${Number(task.duration) || 0} min left</span>
         </div>`).join("")
-        : `<p class="empty-text"><i class="fa-regular fa-calendar"></i> No upcoming deadlines this month. Generate a plan to add a deadline.</p>`;
+        : `<p class="empty-text"><i class="fa-regular fa-calendar"></i> ${selectedCalendarDate ? "No study sessions scheduled for this date." : "No deadlines this month. Generate a plan to add a deadline."}</p>`;
 }
 
 function getCompletedHistoryTasks() {
@@ -1236,7 +1343,7 @@ function renderProgress() {
     const completedCount = completedTasks.length;
     const remainingCount = activeTasks.length;
     const rate = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0;
-    const totalMinutes = completedTasks.reduce((total, task) => total + (Number(task.duration) || 0), 0);
+    const totalMinutes = tasks.reduce((total, task) => total + (Number(task.studiedMinutes) || 0), 0);
     const completedHours = Math.floor(totalMinutes / 60);
     const completedMinutes = totalMinutes % 60;
 
@@ -1244,7 +1351,7 @@ function renderProgress() {
         <div class="progress-stats-grid">
             <article class="progress-stat-card"><span class="stat-icon-wrapper"><i class="fa-solid fa-list-check"></i></span><strong>${remainingCount}</strong><span>Active tasks</span></article>
             <article class="progress-stat-card"><span class="stat-icon-wrapper"><i class="fa-solid fa-circle-check"></i></span><strong>${completedCount}</strong><span>Tasks completed</span></article>
-            <article class="progress-stat-card"><span class="stat-icon-wrapper"><i class="fa-solid fa-hourglass-half"></i></span><strong>${completedHours}h ${completedMinutes}m</strong><span>Focused time completed</span></article>
+            <article class="progress-stat-card"><span class="stat-icon-wrapper"><i class="fa-solid fa-hourglass-half"></i></span><strong>${completedHours}h ${completedMinutes}m</strong><span>Actual focused time</span></article>
             <article class="progress-stat-card"><span class="stat-icon-wrapper"><i class="fa-solid fa-book-open"></i></span><strong>${subjects.length}</strong><span>Active subjects</span></article>
         </div>
         <section class="card progress-overview">
@@ -1267,7 +1374,7 @@ function renderProgress() {
             <div class="history-task-copy">
                 <strong>${escapeHtml(task.name)}</strong>
                 ${task.description ? `<p>${escapeHtml(task.description)}</p>` : ""}
-                <span>${task.completedAt ? `Completed ${new Date(task.completedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}` : "Completed task"} · ${Number(task.duration) || 0} min</span>
+                <span>${task.completedAt ? `Completed ${new Date(task.completedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}` : "Completed task"} · ${Number(task.studiedMinutes) || 0} min studied</span>
             </div>
             <div class="history-actions">
                 <button class="history-restore-button" onclick="toggleTask(${task.id})" aria-label="Restore ${escapeHtml(task.name)} to dashboard">
@@ -1282,6 +1389,23 @@ function renderProgress() {
 }
 
 function renderPomodoro() {
+    const taskSelect = document.getElementById("pomodoroTaskSelect");
+    let selectedTask;
+    if (taskSelect) {
+        const activeTasks = tasks.filter(task => !task.completed);
+        if (selectedPomodoroTaskId && !activeTasks.some(task => String(task.id) === String(selectedPomodoroTaskId))) {
+            selectedPomodoroTaskId = null;
+        }
+        selectedTask = activeTasks.find(task => String(task.id) === String(selectedPomodoroTaskId));
+        taskSelect.innerHTML = `<option value="">General focus session (unlinked)</option>` +
+            activeTasks.map(task => `<option value="${escapeHtml(task.id)}">
+                ${escapeHtml(task.name)} — ${Number(task.duration) || 0} mins left
+            </option>`).join("");
+        taskSelect.value = selectedPomodoroTaskId ? String(selectedPomodoroTaskId) : "";
+        taskSelect.disabled = Boolean(pomodoroInterval);
+    } else {
+        selectedTask = tasks.find(task => String(task.id) === String(selectedPomodoroTaskId));
+    }
     updatePomodoroDisplay();
     updatePomodoroDurationInputs();
     const status = document.getElementById("pomodoroStatus");
@@ -1289,11 +1413,59 @@ function renderPomodoro() {
         status.textContent = pomodoroSeconds <= 0
             ? "Focus session complete. Take a short break!"
             : pomodoroInterval
-                ? "Your focus session is in progress."
-                : "One small focus sprint at a time.";
+                ? selectedTask
+                    ? `Focusing on ${selectedTask.name}. Studied minutes will reduce its remaining time.`
+                    : "General focus session — select a task to track its study debt."
+                : selectedTask
+                    ? `Linked to ${selectedTask.name} · ${Number(selectedTask.duration) || 0} mins remaining.`
+                    : "General focus is unlinked; select a task to track its study debt.";
     }
     updatePomodoroControls();
     renderPomodoroMiniDock();
+}
+
+function selectPomodoroTask(taskId) {
+    if (pomodoroInterval) return;
+    selectedPomodoroTaskId = taskId || null;
+    pomodoroElapsedSeconds = 0;
+    const task = tasks.find(item => String(item.id) === String(selectedPomodoroTaskId));
+    pomodoroSeconds = pomodoroDurationMinutes * 60;
+    updatePomodoroDisplay();
+    updatePomodoroDurationInputs();
+    const status = document.getElementById("pomodoroStatus");
+    if (status) status.textContent = task
+        ? `Linked to ${task.name} · ${Number(task.duration) || 0} mins remaining.`
+        : "General focus is unlinked; select a task to track its study debt.";
+}
+
+async function commitPomodoroProgress() {
+    const studiedMinutes = Math.floor(pomodoroElapsedSeconds / 60);
+    pomodoroElapsedSeconds %= 60;
+    if (studiedMinutes <= 0 || !selectedPomodoroTaskId) return false;
+
+    const task = tasks.find(item => String(item.id) === String(selectedPomodoroTaskId));
+    if (!task || task.completed) return false;
+
+    task.duration = Math.max(0, (Number(task.duration) || 0) - studiedMinutes);
+    task.studiedMinutes = (Number(task.studiedMinutes) || 0) + studiedMinutes;
+
+    const completedNow = task.duration === 0;
+    if (completedNow) {
+        task.completed = true;
+        task.completedAt = new Date().toISOString();
+        selectedPomodoroTaskId = null;
+    }
+
+    const syncPromise = syncTaskToSheet(task);
+    renderTasks();
+    renderDashboardQueue();
+    renderProgress();
+    renderCalendar();
+    renderNotificationPanel();
+    updateNotifications();
+    renderPomodoro();
+    await syncPromise;
+    return completedNow;
 }
 
 function updatePomodoroDurationInputs() {
@@ -1330,6 +1502,7 @@ function setPomodoroDuration() {
 
     pomodoroDurationMinutes = duration;
     pomodoroSeconds = duration * 60;
+    pomodoroElapsedSeconds = 0;
     savePomodoroDuration();
     if (status) status.textContent = "One small focus sprint at a time.";
     const startButton = document.getElementById("pomodoroStartButton");
@@ -1361,6 +1534,7 @@ function updatePomodoroDisplay() {
 
 function updatePomodoroControls() {
     const startButton = document.getElementById("pomodoroStartButton");
+    const taskSelect = document.getElementById("pomodoroTaskSelect");
     const pipStartButton = pomodoroPipWindow?.document.getElementById("pomodoroPipStartButton");
     const miniStartButton = document.getElementById("pomodoroMiniToggle");
     const buttonMarkup = pomodoroInterval
@@ -1369,6 +1543,7 @@ function updatePomodoroControls() {
             ? `<i class="fa-solid fa-rotate-right"></i> Start another`
             : `<i class="fa-solid fa-play"></i> ${pomodoroSeconds < pomodoroDurationMinutes * 60 ? "Resume focus" : "Start focus"}`;
     if (startButton) startButton.innerHTML = buttonMarkup;
+    if (taskSelect) taskSelect.disabled = Boolean(pomodoroInterval);
     if (pipStartButton) {
         pipStartButton.textContent = pomodoroInterval
             ? "Pause"
@@ -1390,31 +1565,55 @@ function updatePomodoroControls() {
     updatePomodoroDurationInputs();
 }
 
-function togglePomodoro() {
+async function togglePomodoro() {
     if (pomodoroInterval) {
         clearInterval(pomodoroInterval);
         pomodoroInterval = null;
+        const hadLinkedTask = Boolean(selectedPomodoroTaskId);
+        const completedTask = await commitPomodoroProgress();
+        const status = document.getElementById("pomodoroStatus");
+        if (status) status.textContent = completedTask
+            ? "Task complete! You paid off its study debt. Amazing work!"
+            : hadLinkedTask
+                ? "Focus paused. Whole studied minutes have been saved."
+                : "Focus paused. No task was linked, so no study debt changed.";
         updatePomodoroControls();
         return;
     }
 
     if (pomodoroSeconds <= 0) {
         pomodoroSeconds = pomodoroDurationMinutes * 60;
+        pomodoroElapsedSeconds = 0;
         const status = document.getElementById("pomodoroStatus");
         if (status) status.textContent = "One small focus sprint at a time.";
     }
     pomodoroInterval = setInterval(() => {
         pomodoroSeconds -= 1;
+        pomodoroElapsedSeconds += 1;
         updatePomodoroDisplay();
         if (pomodoroSeconds <= 0) {
             clearInterval(pomodoroInterval);
             pomodoroInterval = null;
-            const status = document.getElementById("pomodoroStatus");
-            if (status) status.textContent = "Focus session complete. Take a short break!";
-            updatePomodoroControls();
-            if ("Notification" in window && Notification.permission === "granted") {
-                new Notification("StudyNest focus session complete", { body: "Great work! Take a short break before your next session." });
-            }
+            void (async () => {
+                const hadLinkedTask = Boolean(selectedPomodoroTaskId);
+                const completedTask = await commitPomodoroProgress();
+                const status = document.getElementById("pomodoroStatus");
+                if (status) status.textContent = completedTask
+                    ? "Task complete! You paid off its study debt. Amazing work!"
+                    : hadLinkedTask
+                        ? "Focus session complete. Whole studied minutes were applied to your task."
+                        : "Focus session complete. No task was linked, so no study debt changed.";
+                updatePomodoroControls();
+                if ("Notification" in window && Notification.permission === "granted") {
+                    new Notification("StudyNest focus session complete", {
+                        body: completedTask
+                            ? "Task complete! Great job paying off your study debt."
+                            : hadLinkedTask
+                                ? "Great work! Your studied minutes have been applied to the task."
+                                : "Great work! No task was linked to this focus session."
+                    });
+                }
+            })();
         }
     }, 1000);
     updatePomodoroControls();
@@ -1481,12 +1680,16 @@ function closePomodoroMiniTimer() {
     renderPomodoroMiniDock();
 }
 
-function resetPomodoro() {
+async function resetPomodoro() {
     if (pomodoroInterval) clearInterval(pomodoroInterval);
     pomodoroInterval = null;
+    const completedTask = await commitPomodoroProgress();
     pomodoroSeconds = pomodoroDurationMinutes * 60;
+    pomodoroElapsedSeconds = 0;
     const status = document.getElementById("pomodoroStatus");
-    if (status) status.textContent = "One small focus sprint at a time.";
+    if (status) status.textContent = completedTask
+        ? "Task complete! You paid off its study debt. Amazing work!"
+        : "One small focus sprint at a time.";
     updatePomodoroDisplay();
 }
 
@@ -1664,6 +1867,48 @@ function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
 }
 
+function getAvailabilityPreferences() {
+    const defaults = { days: [1, 2, 3, 4, 5], availableFrom: "18:00", availableUntil: "21:00" };
+    const isValidTime = value => {
+        if (typeof value !== "string" || !/^\d{2}:\d{2}$/.test(value)) return false;
+        const [hour, minute] = value.split(":").map(Number);
+        return hour <= 23 && minute <= 59;
+    };
+    try {
+        const saved = localStorage.getItem("studyNestAvailability");
+        if (!saved) return defaults;
+        const preferences = JSON.parse(saved);
+        if (!preferences || !Array.isArray(preferences.days)) return defaults;
+        return {
+            days: preferences.days.map(Number).filter(day => Number.isInteger(day) && day >= 0 && day <= 6),
+            availableFrom: isValidTime(preferences.availableFrom) ? preferences.availableFrom : defaults.availableFrom,
+            availableUntil: isValidTime(preferences.availableUntil) ? preferences.availableUntil : defaults.availableUntil
+        };
+    } catch (error) {
+        console.warn("Failed to load study availability preferences:", error);
+        return defaults;
+    }
+}
+
+function saveAvailabilityPreferences() {
+    const availableFrom = document.getElementById("availableFrom");
+    const availableUntil = document.getElementById("availableUntil");
+    if (!availableFrom || !availableUntil) return;
+
+    const preferences = {
+        days: Array.from(document.querySelectorAll('input[name="studyDay"]'))
+            .filter(input => input.checked)
+            .map(input => Number(input.value)),
+        availableFrom: availableFrom.value,
+        availableUntil: availableUntil.value
+    };
+    try {
+        localStorage.setItem("studyNestAvailability", JSON.stringify(preferences));
+    } catch (error) {
+        console.warn("Failed to save study availability preferences:", error);
+    }
+}
+
 function initializePlannerForm() {
     const deadlineInput = document.getElementById("deadline");
     if (!deadlineInput) return;
@@ -1671,11 +1916,27 @@ function initializePlannerForm() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     deadlineInput.min = normalizeDeadlineString(today);
+
+    const preferences = getAvailabilityPreferences();
+    document.querySelectorAll('input[name="studyDay"]').forEach(input => {
+        input.checked = preferences.days.includes(Number(input.value));
+        input.addEventListener("change", saveAvailabilityPreferences);
+    });
+    const availableFrom = document.getElementById("availableFrom");
+    const availableUntil = document.getElementById("availableUntil");
+    availableFrom.value = preferences.availableFrom;
+    availableUntil.value = preferences.availableUntil;
+    availableFrom.addEventListener("change", saveAvailabilityPreferences);
+    availableUntil.addEventListener("change", saveAvailabilityPreferences);
 }
 
 function timeToMinutes(time) {
     const [hours, minutes] = time.split(":").map(Number);
     return hours * 60 + minutes;
+}
+
+function minutesToTime(minutes) {
+    return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
 function formatTimeLabel(time) {
@@ -1684,6 +1945,47 @@ function formatTimeLabel(time) {
         hour: "numeric",
         minute: "2-digit"
     });
+}
+
+function getTaskTimeSlot(task) {
+    if (task.timeSlot) return String(task.timeSlot);
+    const descriptionSlot = String(task.description || "").match(/^\[([^\]]+)\]/);
+    return descriptionSlot ? descriptionSlot[1] : "";
+}
+
+function parseTimeSlot(timeSlot) {
+    const match = String(timeSlot || "").match(
+        /^\s*(\d{1,2})[.:](\d{2})\s*(AM|PM|A\.M\.|P\.M\.)?\s*[–-]\s*(\d{1,2})[.:](\d{2})\s*(AM|PM|A\.M\.|P\.M\.)?\s*$/i
+    );
+    if (!match) return null;
+
+    const toMinutes = (hourValue, minuteValue, meridiem) => {
+        const hourValueNumber = Number(hourValue);
+        if (!meridiem) return hourValueNumber * 60 + Number(minuteValue);
+        const period = meridiem.replace(/\./g, "").toUpperCase();
+        const hour = hourValueNumber % 12 + (period === "PM" ? 12 : 0);
+        return hour * 60 + Number(minuteValue);
+    };
+    const start = toMinutes(match[1], match[2], match[3]);
+    const end = toMinutes(match[4], match[5], match[6]);
+    if (start < 0 || start >= 1440 || end < 0 || end > 1440) return null;
+    return end > start ? { start, end } : null;
+}
+
+function findAvailableTimeSlot(dateKey, windowStart, windowEnd, duration) {
+    const bookedSlots = tasks
+        .filter(task => !task.completed && normalizeDeadlineString(task.deadline) === dateKey)
+        .map(task => parseTimeSlot(getTaskTimeSlot(task)))
+        .filter(Boolean)
+        .sort((a, b) => a.start - b.start);
+
+    let start = windowStart;
+    for (const booked of bookedSlots) {
+        if (booked.end <= start) continue;
+        if (booked.start - start >= duration) return start;
+        start = Math.max(start, booked.end);
+    }
+    return start + duration <= windowEnd ? start : null;
 }
 
 function buildFuzzyStudyPlan(topic, description, deadline, hours, difficulty, availableDays) {
@@ -1786,27 +2088,39 @@ async function generatePlan() {
     }
 
     const resultDiv = document.getElementById("generatedPlan");
+    const planResult = document.getElementById("planResult");
     resultDiv.innerHTML = "";
+    planResult.classList.add("hidden");
+    saveAvailabilityPreferences();
 
     const fuzzyPlan = buildFuzzyStudyPlan(topic, description, deadline, hours, difficulty, availableDays);
     if (!fuzzyPlan.days.length) return showFormMessage(fuzzyPlan.summary);
+    const windowStart = timeToMinutes(availableFrom);
+    const windowEnd = timeToMinutes(availableUntil);
+    const scheduledDays = fuzzyPlan.days.map(day => {
+        const start = findAvailableTimeSlot(day.date, windowStart, windowEnd, day.sessionMinutes);
+        return start === null ? null : { day, start, end: start + day.sessionMinutes };
+    }).filter(Boolean);
+    if (!scheduledDays.length) {
+        return showFormMessage("Your selected study days are already full during this time window. Choose another time or free day.");
+    }
+
     const selectedSubject = material && !material.topicId
         ? subjects.find(subject => String(subject.id) === String(material.subjectId))
         : null;
     const courseTopics = selectedSubject ? (selectedSubject.topics || []) : [];
-    const sessionEndMinutes = timeToMinutes(availableFrom) + hours * 60;
-    const sessionEnd = `${String(Math.floor(sessionEndMinutes / 60)).padStart(2, "0")}:${String(sessionEndMinutes % 60).padStart(2, "0")}`;
-    const sessionTasks = fuzzyPlan.days.map((day, index) => {
+    const sessionTasks = scheduledDays.map(({ day, start, end }, index) => {
         const sessionTopic = courseTopics.length ? courseTopics[index % courseTopics.length] : null;
         const sessionTopicName = sessionTopic ? sessionTopic.name : topic;
         const focusLine = day.dayNumber === fuzzyPlan.days.length
             ? `Final review + active recall for ${sessionTopicName}.${description ? ` ${description}` : ""}`
             : `Build understanding of ${sessionTopicName}${description ? ` (${description})` : ""} with short review blocks.`;
+        const timeSlot = `${formatTimeLabel(minutesToTime(start))}–${formatTimeLabel(minutesToTime(end))}`;
         const dayCard = document.createElement("div");
         dayCard.className = "plan-day-card";
         dayCard.innerHTML = `
             <h4>Session ${day.dayNumber} · ${formatDeadline(day.date, { weekday: "long", month: "short", day: "numeric" })}</h4>
-            <p><i class="fa-regular fa-clock"></i> ${formatTimeLabel(availableFrom)}–${formatTimeLabel(sessionEnd)} · ${day.sessionMinutes} mins</p>
+            <p><i class="fa-regular fa-clock"></i> ${escapeHtml(timeSlot)} · ${day.sessionMinutes} mins</p>
             <p><strong>${escapeHtml(day.label)}</strong> · ${escapeHtml(focusLine)}</p>
         `;
         resultDiv.appendChild(dayCard);
@@ -1814,9 +2128,10 @@ async function generatePlan() {
         return {
             name: `Study Focus: ${sessionTopicName}`,
             duration: day.sessionMinutes,
+            timeSlot,
             completed: false,
             deadline: day.date,
-            description: focusLine,
+            description: `[${timeSlot}] ${focusLine}`,
             ...(material ? {
                 subjectId: material.subjectId,
                 ...((sessionTopic && sessionTopic.id) || material.topicId
@@ -1827,8 +2142,9 @@ async function generatePlan() {
         };
     });
 
-    document.getElementById("planResult").classList.remove("hidden");
-    document.getElementById("generatedPlanDescription").textContent = `${fuzzyPlan.summary} ${description ? `Focus: ${description}` : `A structured plan for ${topic}.`}`;
+    planResult.classList.remove("hidden");
+    const skippedSessions = fuzzyPlan.days.length - scheduledDays.length;
+    document.getElementById("generatedPlanDescription").textContent = `${fuzzyPlan.summary} ${skippedSessions ? `${skippedSessions} session${skippedSessions === 1 ? "" : "s"} skipped because the time window was full. ` : ""}${description ? `Focus: ${description}` : `A structured plan for ${topic}.`}`;
 
     let nextTaskId = Date.now();
     const newTasks = sessionTasks.map(sessionTask => {
@@ -1840,7 +2156,7 @@ async function generatePlan() {
     tasks.push(...newTasks);
     await saveAppState();
     for (const task of newTasks) {
-        await syncTaskToSheet(task);
+        await syncTaskToSheet(task, false);
     }
     updateNotifications();
 }
