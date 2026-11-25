@@ -345,6 +345,9 @@ async function navigateTo(pageName) {
         const response = await fetch(`views/${pageName}.html`);
         if (!response.ok) throw new Error("Page not found");
         const html = await response.text();
+        if (container.querySelector("#focusMusicPlayer")) {
+            stopFocusMusicPlayback();
+        }
         container.innerHTML = html;
 
         document.querySelectorAll(".nav-btn").forEach(btn => {
@@ -1510,7 +1513,21 @@ function getYouTubeEmbedUrl(value) {
     return null;
 }
 
+function stopFocusMusicPlayback() {
+    const player = document.getElementById("focusMusicPlayer");
+    const fallbackLink = document.getElementById("focusMusicFallback");
+    if (player) {
+        player.innerHTML = "";
+        player.classList.add("hidden");
+    }
+    if (fallbackLink) {
+        fallbackLink.classList.add("hidden");
+        fallbackLink.removeAttribute("href");
+    }
+}
+
 function startFocusMusic(embedUrl, title, youtubeUrl) {
+    stopFocusMusicPlayback();
     const player = document.getElementById("focusMusicPlayer");
     const status = document.getElementById("focusMusicStatus");
     if (!player) return;
@@ -1519,7 +1536,7 @@ function startFocusMusic(embedUrl, title, youtubeUrl) {
         allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"
         allowfullscreen></iframe>`;
     player.classList.remove("hidden");
-    if (status) status.textContent = `Playing ${title}. Use the player controls to adjust the sound.`;
+    if (status) status.textContent = `Opening ${title}. If it doesn't start, press play in the player.`;
     const fallbackLink = document.getElementById("focusMusicFallback");
     if (fallbackLink) {
         fallbackLink.href = youtubeUrl;
@@ -1529,22 +1546,15 @@ function startFocusMusic(embedUrl, title, youtubeUrl) {
 
 function playFocusMusicPreset(presetName) {
     const videoId = FOCUS_MUSIC_PRESETS[presetName];
+    const status = document.getElementById("focusMusicStatus");
     if (!videoId) {
-        const status = document.getElementById("focusMusicStatus");
         if (status) status.textContent = "That music option isn't available. Choose lo-fi or soft jazz.";
         return;
     }
 
     const title = presetName === "lofi" ? "lo-fi radio" : "soft jazz";
-    const embedHost = presetName === "lofi" ? "www.youtube.com" : "www.youtube-nocookie.com";
-    const youtubeUrl = presetName === "lofi"
-        ? `https://www.youtube.com/live/${videoId}`
-        : `https://www.youtube.com/watch?v=${videoId}`;
-    startFocusMusic(
-        `https://${embedHost}/embed/${videoId}?autoplay=1`,
-        title,
-        youtubeUrl
-    );
+    const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    startFocusMusic(`https://www.youtube.com/embed/${videoId}?autoplay=1`, title, youtubeUrl);
 }
 
 function playCustomFocusMusic(event) {
@@ -1562,17 +1572,8 @@ function playCustomFocusMusic(event) {
 }
 
 function stopFocusMusic() {
-    const player = document.getElementById("focusMusicPlayer");
+    stopFocusMusicPlayback();
     const status = document.getElementById("focusMusicStatus");
-    const fallbackLink = document.getElementById("focusMusicFallback");
-    if (player) {
-        player.innerHTML = "";
-        player.classList.add("hidden");
-    }
-    if (fallbackLink) {
-        fallbackLink.classList.add("hidden");
-        fallbackLink.removeAttribute("href");
-    }
     if (status) status.textContent = "Music stopped. Your focus session is still going.";
 }
 
