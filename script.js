@@ -172,6 +172,27 @@ function normalizeDeadlineString(deadline) {
         return `${isoDateMatch[1]}-${isoDateMatch[2]}-${isoDateMatch[3]}`;
     }
 
+    const slashDateMatch = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (slashDateMatch) {
+        const first = Number(slashDateMatch[1]);
+        const second = Number(slashDateMatch[2]);
+        const year = Number(slashDateMatch[3]);
+        const month = first > 12 ? second : first;
+        const day = first > 12 ? first : second;
+        const date = new Date(year, month - 1, day);
+        if (date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day) {
+            return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        }
+    }
+
+    const parsedDate = new Date(normalized);
+    if (!Number.isNaN(parsedDate.getTime())) {
+        const year = parsedDate.getFullYear();
+        const month = String(parsedDate.getMonth() + 1).padStart(2, "0");
+        const day = String(parsedDate.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+    }
+
     return normalized;
 }
 
@@ -225,7 +246,7 @@ async function loadDataFromSheet() {
         const loadedSubjects = Array.isArray(data.subjects) ? data.subjects : [];
 
         if (loadedTasks.length || loadedSubjects.length) {
-            tasks = loadedTasks;
+            tasks = loadedTasks.map(task => sanitizeTaskDeadline({ ...task }));
             const localSubjects = subjects;
             subjects = loadedSubjects.map(loadedSubject => {
                 const localSubject = localSubjects.find(item => String(item.id) === String(loadedSubject.id));
@@ -692,14 +713,21 @@ function renderSubjects() {
     }
 
     container.innerHTML = subjects.map(sub => `
-        <div class="subject-item" onclick="openSubjectDetail(${sub.id})" style="cursor: pointer;">
-            <div>
-                <strong>${sub.name}</strong>
-                <span class="sub-badge">${sub.difficulty}</span>
+        <div class="subject-widget-card" onclick="openSubjectDetail(${sub.id})">
+            <div class="widget-header">
+                <i class="fa-solid fa-book-open widget-icon" aria-hidden="true"></i>
+                <button class="delete-btn" onclick="deleteSubject(${sub.id}, event)" aria-label="Delete ${escapeHtml(sub.name)}">
+                    <i class="fa-solid fa-trash" aria-hidden="true"></i>
+                </button>
             </div>
-            <button class="delete-btn" onclick="deleteSubject(${sub.id}, event)">
-                <i class="fa-solid fa-trash"></i>
-            </button>
+            <div class="widget-body">
+                <h3 class="widget-title">${escapeHtml(sub.name)}</h3>
+                <span class="sub-badge">${escapeHtml(sub.difficulty || "Medium")}</span>
+            </div>
+            <div class="widget-footer">
+                <span>${(sub.topics || []).length} topic${(sub.topics || []).length === 1 ? "" : "s"}</span>
+                <span>${escapeHtml(sub.difficulty || "Medium")}</span>
+            </div>
         </div>
     `).join("");
 }
@@ -811,7 +839,10 @@ function renderSubjectDetail() {
                                 ${(topic.files || []).map(file => `
                                     <li id="file-${sub.id}-${topic.id}-${file.id}" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-color);">
                                         <a href="javascript:void(0)" onclick="viewFile(${sub.id}, ${topic.id}, ${file.id})" style="text-decoration: none; color: inherit;">
-                                            <i class="fa-solid fa-file-pdf"></i> ${file.fileName}
+                                            <i class="fa-solid fa-file-pdf"></i> ${escapeHtml(file.fileName)}
+                                        </a>
+                                        <a href="#" class="file-download-link" onclick="downloadFile(${sub.id}, ${topic.id}, ${file.id}, event)" aria-label="Download ${escapeHtml(file.fileName)}" title="Download file">
+                                            <i class="fa-solid fa-download" aria-hidden="true"></i>
                                         </a>
                                         <i class="fa-solid fa-xmark remove-file-icon" onclick="deleteFile(${sub.id}, ${topic.id}, ${file.id})" title="Delete File" style="cursor: pointer; color: #d9534f;"></i>
                                     </li>
@@ -825,33 +856,58 @@ function renderSubjectDetail() {
     `;
 }
 
+function getFileBlob(file) {
+    const base64Parts = file.fileData.split(',');
+    const mimeMatch = base64Parts[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'application/pdf';
+    const encodedData = base64Parts[1];
+    if (!encodedData) throw new Error("File data is not a valid data URL.");
+
+    const byteCharacters = atob(encodedData);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+
+    return new Blob([new Uint8Array(byteNumbers)], { type: mime });
+}
+
 function viewFile(subjectId, topicId, fileId) {
-    const sub = subjects.find(s => s.id === subjectId);
+    const sub = subjects.find(s => String(s.id) === String(subjectId));
     if (!sub) return;
-    const topic = (sub.topics || []).find(t => t.id === topicId);
+    const topic = (sub.topics || []).find(t => String(t.id) === String(topicId));
     if (!topic) return;
-    const file = (topic.files || []).find(f => f.id === fileId);
+    const file = (topic.files || []).find(f => String(f.id) === String(fileId));
     if (!file || !file.fileData) return;
 
     try {
-        const base64Parts = file.fileData.split(',');
-        const mimeMatch = base64Parts[0].match(/:(.*?);/);
-        const mime = mimeMatch ? mimeMatch[1] : 'application/pdf';
-
-        const byteCharacters = atob(base64Parts[1]);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-
-        const blob = new Blob([byteArray], { type: mime });
-        const blobUrl = URL.createObjectURL(blob);
-        
+        const blobUrl = URL.createObjectURL(getFileBlob(file));
         window.open(blobUrl, '_blank');
     } catch (err) {
         console.error("Error displaying file:", err);
         alert("Failed to view file preview.");
+    }
+}
+
+function downloadFile(subjectId, topicId, fileId, event) {
+    if (event) event.preventDefault();
+    const subject = subjects.find(item => String(item.id) === String(subjectId));
+    const topic = subject && (subject.topics || []).find(item => String(item.id) === String(topicId));
+    const file = topic && (topic.files || []).find(item => String(item.id) === String(fileId));
+    if (!file || !file.fileData) return;
+
+    try {
+        const objectUrl = URL.createObjectURL(getFileBlob(file));
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = file.fileName || "download";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (err) {
+        console.error("Error downloading file:", err);
+        alert("Failed to download file.");
     }
 }
 
@@ -890,7 +946,6 @@ async function renameTopic(subjectId, topicId, event) {
         return;
     }
     topic.name = cleanedName;
-    topic.name = cleanedName;
     await syncSubjectToSheet(subject);
     renderSubjectDetail();
 }
@@ -905,7 +960,6 @@ async function deleteTopic(subjectId, topicId, event) {
 
     const confirmed = window.confirm(`Delete the topic "${topic.name}" and all uploaded files inside it?`);
     if (!confirmed) return;
-    subject.topics = (subject.topics || []).filter(t => String(t.id) !== String(topicId));
     subject.topics = (subject.topics || []).filter(t => String(t.id) !== String(topicId));
     await syncSubjectToSheet(subject);
     renderSubjectDetail();
@@ -1736,38 +1790,58 @@ async function generatePlan() {
 
     const fuzzyPlan = buildFuzzyStudyPlan(topic, description, deadline, hours, difficulty, availableDays);
     if (!fuzzyPlan.days.length) return showFormMessage(fuzzyPlan.summary);
+    const selectedSubject = material && !material.topicId
+        ? subjects.find(subject => String(subject.id) === String(material.subjectId))
+        : null;
+    const courseTopics = selectedSubject ? (selectedSubject.topics || []) : [];
     const sessionEndMinutes = timeToMinutes(availableFrom) + hours * 60;
     const sessionEnd = `${String(Math.floor(sessionEndMinutes / 60)).padStart(2, "0")}:${String(sessionEndMinutes % 60).padStart(2, "0")}`;
-    fuzzyPlan.days.forEach(day => {
+    const sessionTasks = fuzzyPlan.days.map((day, index) => {
+        const sessionTopic = courseTopics.length ? courseTopics[index % courseTopics.length] : null;
+        const sessionTopicName = sessionTopic ? sessionTopic.name : topic;
+        const focusLine = day.dayNumber === fuzzyPlan.days.length
+            ? `Final review + active recall for ${sessionTopicName}.${description ? ` ${description}` : ""}`
+            : `Build understanding of ${sessionTopicName}${description ? ` (${description})` : ""} with short review blocks.`;
         const dayCard = document.createElement("div");
         dayCard.className = "plan-day-card";
         dayCard.innerHTML = `
             <h4>Session ${day.dayNumber} · ${formatDeadline(day.date, { weekday: "long", month: "short", day: "numeric" })}</h4>
             <p><i class="fa-regular fa-clock"></i> ${formatTimeLabel(availableFrom)}–${formatTimeLabel(sessionEnd)} · ${day.sessionMinutes} mins</p>
-            <p><strong>${escapeHtml(day.label)}</strong> · ${escapeHtml(day.focusLine)}</p>
+            <p><strong>${escapeHtml(day.label)}</strong> · ${escapeHtml(focusLine)}</p>
         `;
         resultDiv.appendChild(dayCard);
+
+        return {
+            name: `Study Focus: ${sessionTopicName}`,
+            duration: day.sessionMinutes,
+            completed: false,
+            deadline: day.date,
+            description: focusLine,
+            ...(material ? {
+                subjectId: material.subjectId,
+                ...((sessionTopic && sessionTopic.id) || material.topicId
+                    ? { topicId: sessionTopic ? sessionTopic.id : material.topicId }
+                    : {}),
+                ...(material.materialId ? { materialId: material.materialId } : {})
+            } : {})
+        };
     });
 
     document.getElementById("planResult").classList.remove("hidden");
     document.getElementById("generatedPlanDescription").textContent = `${fuzzyPlan.summary} ${description ? `Focus: ${description}` : `A structured plan for ${topic}.`}`;
 
-    const newTask = {
-        id: Date.now(),
-        name: `Study Focus: ${topic}`,
-        duration: hours * 60,
-        completed: false,
-        deadline,
-        description,
-        ...(material ? {
-            subjectId: material.subjectId,
-            ...(material.topicId ? { topicId: material.topicId } : {}),
-            ...(material.materialId ? { materialId: material.materialId } : {})
-        } : {})
-    };
-
-    tasks.push(newTask);
-    await syncTaskToSheet(newTask);
+    let nextTaskId = Date.now();
+    const newTasks = sessionTasks.map(sessionTask => {
+        while (tasks.some(task => String(task.id) === String(nextTaskId))) nextTaskId += 1;
+        const newTask = { id: nextTaskId, ...sessionTask };
+        nextTaskId += 1;
+        return newTask;
+    });
+    tasks.push(...newTasks);
+    await saveAppState();
+    for (const task of newTasks) {
+        await syncTaskToSheet(task);
+    }
     updateNotifications();
 }
 
